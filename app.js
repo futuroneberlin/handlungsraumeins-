@@ -122,7 +122,7 @@ function draw() {
   );
 
 });
-});
+
 
   requestAnimationFrame(draw);
 }
