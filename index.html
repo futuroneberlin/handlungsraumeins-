@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Handlungsraum</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hud">
+        <div class="hud__block">
+          <p class="hud__eyebrow">Handlungsraum</p>
+          <h1 class="hud__title">Text als räumliche soziale Konstruktion</h1>
+        </div>
+
+        <div class="hud__block hud__block--controls">
+          <button id="reload-button" class="hud__button" type="button">Raum neu lesen</button>
+          <label class="hud__upload">
+            <span>PDF ergänzen</span>
+            <input id="upload-input" type="file" accept="application/pdf" multiple />
+          </label>
+        </div>
+      </header>
+
+      <section class="meta-panel" aria-live="polite">
+        <div class="meta-panel__column">
+          <p class="meta-panel__label">Status</p>
+          <p id="status-text" class="meta-panel__value">Lade räumliches Material …</p>
+        </div>
+        <div class="meta-panel__column">
+          <p class="meta-panel__label">Relation</p>
+          <p id="relation-text" class="meta-panel__value">Noch keine aktiven Verbindungen</p>
+        </div>
+        <div class="meta-panel__column meta-panel__column--wide">
+          <p class="meta-panel__label">Fokus</p>
+          <p id="focus-text" class="meta-panel__value">Bewege den Cursor durch den Raum oder warte auf die langsame Reorganisation.</p>
+        </div>
+      </section>
+
+      <section class="stage">
+        <canvas id="scene" aria-label="Typografischer Handlungsraum"></canvas>
+
+        <aside class="legend">
+          <p class="legend__line legend__line--accent">Gelbe Marker zeigen geteilte Begriffe.</p>
+          <p class="legend__line">Linien verbinden Fragmente über relationale Überschneidungen.</p>
+          <p class="legend__line">Wikipedia-Kontexte erscheinen nur dort, wo der Raum einen Begriff trägt.</p>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
