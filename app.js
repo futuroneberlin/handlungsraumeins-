@@ -23,7 +23,7 @@ let visibleLines = [];
 let currentLine = 0;
 
 // Neue Zeile alle 700ms
-setInterval(() => {
+const interval = setInterval(() => {
 
   if (currentLine < lines.length) {
 
@@ -34,6 +34,11 @@ setInterval(() => {
     });
 
     currentLine++;
+
+  } else {
+
+    clearInterval(interval);
+
   }
 
 }, 700);
