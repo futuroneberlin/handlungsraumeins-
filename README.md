@@ -1,69 +1,114 @@
-# handlungsraumeins-
-Du bist ein erfahrener Creative Coding Entwickler, spezialisiert auf digitale Kunst, räumliche Interfaces und minimalistische Webarchitektur.
+HANDLUNGSRAUM
+Internetbasierter räumlicher Aufbauprozess zwischen Theorie, Sprache und Bewegung
 
-Erstelle ein vollständiges Repository-Konzept für ein künstlerisches Webprojekt namens "Handlungsraum".
+Handlungsraum ist ein webbasierter, kontinuierlicher Aufbauprozess von Raum durch theoretische Internetdaten.
 
-KONTEXT:
-Handlungsraum ist ein webbasierter räumlicher Aufbauprozess zwischen Text, Bewegung und gesellschaftlicher Relation.
+Der Raum entsteht  aus kuratierten, dynamisch geladenen Konzepten aus dem Internet im Kontext von:
 
-Das Projekt verbindet philosophische Ansätze von:
-- John Dewey („Kunst als Erfahrung“)
-- Georg W. Bertram („Kunst als menschliche Praxis“)
-- Joseph Beuys („Soziale Plastik“)
+Kunst
+Kunsttheorien
+Soziale Plastik (Soziale Plastik)
+Kunst als Erfahrung (John Dewey Kunsttheorie)
+Kunst als menschliche Praxis (Georg W. Bertram Kunsttheorie)
+Raumtheorie und Architektur
+Bildhauerei als sozialer Prozess
+KONZEPT
 
-Der Raum soll nicht wie ein klassischer Partikel-Visualizer wirken, sondern wie eine architektonische, typografische Konstruktion.
+Der Handlungsraum funktioniert als zeitlich aufgebauter Denkraum.
 
-ZIEL:
-Texte aus PDF-Dokumenten werden fragmentiert und als räumliche typografische Elemente im Canvas angeordnet.
-Der Raum entwickelt sich langsam und kontinuierlich.
-Wikipedia-Begriffe erzeugen relationale Verbindungen zwischen den Fragmenten.
+Er besteht aus drei miteinander verschränkten Ebenen:
 
-ÄSTHETISCHE PRINZIPIEN:
-- große negative Räume
-- industrielle Grotesk-Typografie
-- UI experience
+1. THEORIEFLUSS (LINKS)
 
-TECHNISCHE ANFORDERUNGEN:
-- HTML5
-- CSS3
-- Vanilla JavaScript
-- HTML5 Canvas
-- PDF.js
-- modulare Struktur
-- keine Frameworks
-- performante Architektur
-- responsive
-- leicht verständlicher Code
+Ein schneller, sequentieller Datenstrom aus Internetquellen.
 
-FUNKTIONEN:
-1. PDF-Dateien aus /pdf laden
-2. Text extrahieren
-3. Text in Fragmente zerlegen
-4. Fragmente räumlich anordnen
-5. Langsame Drift-Bewegung erzeugen
-6. Begriffsüberschneidungen erkennen
-7. Wikipedia API integrieren
-8. Relationale Linien visualisieren
-9. Gelbe relationale Markierungen darstellen
-10. Permanente räumliche Reorganisation ermöglichen
+Wikipedia / Theoriefragmente / konzeptuelle Sätze
+typewriter-artig
+archivisch
 
-WICHTIG:
-Die Architektur soll sich wie ein künstlerischer Raum anfühlen, nicht wie ein typisches Frontend-Projekt.
 
-ERSTELLE:
-- vollständige Ordnerstruktur
-- README.md
-- index.html
-- style.css
-- app.js
-- Canvas-System
-- PDF.js Integration
-- Wikipedia-Modul
-- Typografie-System
-- räumliches Layout-System
-- Bewegungssystem
-- Kommentierungen im Code
-- minimalistisches UI-Konzept
-- erste funktionierende Prototype-Version
 
-Die Sprache im README soll eher künstlerisch-konzeptionell sein als technisch-marketingorientiert.
+2. SEMANTISCHE EXTRAKTION
+
+Aus dem Theoriefluss werden nicht Wörter, sondern Bedeutungsfelder gebildet:
+
+Raum
+Handlung
+Praxis
+Gesellschaft
+Erfahrung
+Struktur
+Relation
+soziale Plastik
+
+Diese Begriffe sind keine Tokens, sondern tragende Konzepte.3. FUNDAMENT (MITTE)
+
+Die extrahierten Begriffe werden zu einem räumlichen Fundament.
+
+ziegelsteinartig
+schichtweise
+langsam
+stabil
+
+Jeder Begriff wird als räumliches Objekt gesetzt und bleibt Teil einer wachsenden Struktur.
+
+Das Fundament ist eine sprachliche Architektur.
+
+4. RELATIONEN (SPÄTE PHASE)
+
+Wikipedia- oder Internet-Sätze erscheinen als:
+
+externe Eingriffe
+semantische Verbindungen
+relationale Linien (optional und minimal)
+
+Sie verbinden Begriffe im Fundament, ohne es zu dominieren.
+
+RÄUMLICHE PRINZIPIEN
+
+Der Raum folgt vier stabilen Achsen:
+
+Aufbau
+Relation
+Bewegung
+Leere
+
+Wichtige Prinzipien:
+
+Leere ist aktiv
+Nähe erzeugt Bedeutung
+Wiederholung erzeugt Verdichtung
+Bewegung ist langsam und lesbar
+keine visuelle Überladung
+ARCHITEKTUR DES SYSTEMS
+Core Modules
+timelineController.js → steuert Phasen (Flow → Extraction → Foundation → Relations)
+theoryLoader.js → lädt Internet-Theoriefragmente
+semanticExtractor.js → bildet semantische Cluster
+foundationBuilder.js → baut räumliches Fundament
+spatialLayout.js → Positionierung im Raum
+relationEngine.js → erzeugt temporäre Verbindungen
+renderer.js → Canvas Darstellung
+ZEITLICHE STRUKTUR
+Phase 1 — THEORIEFLUSS
+schnelle Textausgabe (links)
+0.3–0.6s Intervalle
+sequentiell
+archivartig
+Phase 2 — SEMANTIK
+Begriffe werden extrahiert
+Clusterbildung
+Gewichtung nach Bedeutung
+Phase 3 — FUNDAMENT
+Begriffe werden einzeln gesetzt
+ziegelsteinartige Struktur
+langsamer Aufbau
+Phase 4 — RELATIONEN
+externe Sätze (Wikipedia / Internet)
+verbinden Begriffe
+bleiben temporär
+ZIEL
+
+Der Nutzer soll beobachten können:
+
+wie theoretische Sprache sich in räumliche Architektur verwandelt
