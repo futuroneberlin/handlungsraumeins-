@@ -448,8 +448,6 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
     context.restore();
   }
 
-  drawTheoryFlow(context, safeViewport, safeFeedLines);
-
   const fragmentByIndex = safeFragments;
   const depthSortedFragments = sortFragmentsForDepth(safeFragments);
   const { background, middle, foreground } = splitByDepth(depthSortedFragments);

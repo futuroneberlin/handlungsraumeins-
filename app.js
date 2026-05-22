@@ -29,6 +29,8 @@ const RELATION_INTERVAL = 4200;
 const WIKI_INTERVAL = 7500;
 
 const canvas = document.getElementById("scene");
+const ingestionPanel = document.getElementById("ingestion-panel");
+const foundationPanel = document.getElementById("foundation-panel");
 
 if (!canvas) {
   throw new Error("Canvas-Element nicht gefunden.");
@@ -71,6 +73,19 @@ function normalizeKey(value) {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "")
     .trim();
+}
+
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>\"']/g, (character) => {
+    switch (character) {
+      case "&": return "&amp;";
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case '"': return "&quot;";
+      case "'": return "&#39;";
+      default: return character;
+    }
+  });
 }
 
 async function loadJson(path, fallback) {
@@ -218,6 +233,69 @@ function fitText(ctx, text, maxWidth) {
   return `${value.slice(0, Math.max(0, end))}${ellipsis}`;
 }
 
+function renderWorkspacePanels() {
+  if (ingestionPanel) {
+    const activeItems = [
+      ...state.ingestionQueue.slice(0, 6).map((item) => ({
+        title: item.source || "Ingestion",
+        text: item.text || item.rawText || "",
+        meta: "raw fragment",
+      })),
+      ...state.feedLines.slice(-4).map((line) => ({
+        title: line.source || "Stream",
+        text: line.text || "",
+        meta: "processed ingestion",
+      })),
+    ];
+
+    ingestionPanel.innerHTML = [
+      `<div class="zone-meta"><span>queue ${state.ingestionQueue.length}</span><span>transform ${state.transformationQueue.length}</span></div>`,
+      ...activeItems.map((item) => `
+        <article class="zone-card">
+          <strong>${escapeHtml(item.title)}</strong>
+          <span>${escapeHtml(item.text)}</span>
+          <small>${escapeHtml(item.meta)}</small>
+        </article>
+      `),
+    ].join("");
+  }
+
+  if (foundationPanel) {
+    const categoryCounts = new Map();
+    for (const fragment of state.fragments) {
+      if (fragment.phase !== "foundation") {
+        continue;
+      }
+
+      const key = (fragment.semanticGroup || fragment.category || fragment.keyword || fragment.text || "Kategorie").toString();
+      categoryCounts.set(key, (categoryCounts.get(key) || 0) + 1);
+    }
+
+    const categories = [...categoryCounts.entries()]
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 8);
+
+    foundationPanel.innerHTML = [
+      `<div class="zone-meta"><span>foundation ${state.fragments.filter((fragment) => fragment.phase === "foundation").length}</span><span>relations ${state.relations.length}</span></div>`,
+      categories.length
+        ? categories.map(([name, count]) => `
+          <article class="zone-card">
+            <strong>${escapeHtml(name.toUpperCase())}</strong>
+            <span>stable cluster</span>
+            <small>${count} nodes</small>
+          </article>
+        `).join("")
+        : `
+          <article class="zone-card">
+            <strong>Wartet auf Emergenz</strong>
+            <span>Kategorien entstehen erst nach ausreichender Dichte.</span>
+            <small>center simulation active</small>
+          </article>
+        `,
+    ].join("");
+  }
+}
+
 async function loadInitialData() {
   const [theoryCorpus, parsedTexts, wikiSeed] = await Promise.all([
     loadTheoryCorpus(),
@@ -236,6 +314,7 @@ async function loadInitialData() {
   state.wikiSeed = Array.isArray(wikiSeed) ? wikiSeed : [];
 
   state.nextTransformationAt = performance.now() + 600;
+  renderWorkspacePanels();
 }
 
 async function loadWikipediaPulse() {
@@ -394,8 +473,10 @@ function tick(now) {
     updateSpatialMemory(state.fragments, delta);
     state.relations = updateRelationLayer(state.relations, now);
 
+    renderWorkspacePanels();
+
     try {
-      renderScene(context, state.viewport, state.fragments, state.relations, state.feedLines);
+      renderScene(context, state.viewport, state.fragments, state.relations);
     } catch (error) {
       console.error("Render crash prevented:", error);
       const viewport = state.viewport || { width: canvas.width, height: canvas.height };

@@ -47,9 +47,12 @@ select {
 }
 
 .app-shell {
-  position: relative;
-  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 1rem;
   min-height: 100dvh;
+  height: 100dvh;
+  padding: 1rem;
   overflow: hidden;
   isolation: isolate;
 }
@@ -73,10 +76,74 @@ select {
 h1 {
   margin: 0;
   max-width: 15ch;
-  font-size: clamp(1.5rem, 2.5vw, 3rem);
+  font-size: clamp(1.15rem, 1.6vw, 1.9rem);
   line-height: 0.96;
   font-weight: 600;
   letter-spacing: -0.05em;
+}
+
+.zone {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(14, 14, 14, 0.78);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.zone-header {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.zone-panel {
+  display: grid;
+  gap: 0.75rem;
+  overflow: auto;
+  min-height: 0;
+}
+
+.zone-card {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.zone-card strong {
+  display: block;
+  margin-bottom: 0.22rem;
+  font-size: 0.96rem;
+}
+
+.zone-card span,
+.zone-card small {
+  display: block;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.zone-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.ingestion {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.fundament {
+  border-color: rgba(201, 162, 39, 0.16);
 }
 
 .controls {
@@ -135,16 +202,17 @@ h1 {
 
 .stage-shell {
   position: relative;
-  width: 100vw;
-  min-height: 100dvh;
+  min-width: 0;
+  min-height: 0;
   z-index: 1;
   background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
 }
 
 #scene {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
@@ -198,16 +266,18 @@ h1 {
 }
 
 @media (max-width: 860px) {
-  .hud {
-    flex-direction: column;
+  .app-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .zone,
+  .stage-shell {
+    min-height: 32rem;
   }
 
   .controls {
     justify-content: flex-start;
-  }
-
-  .status-panel {
-    width: auto;
-    left: clamp(1rem, 2vw, 1.6rem);
   }
 }

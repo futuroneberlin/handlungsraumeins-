@@ -10,9 +10,25 @@
 
 <body>
   <div class="app-shell">
+    <aside class="ingestion zone" aria-label="Wikipedia Ingestion">
+      <div class="zone-header">
+        <p class="eyebrow">Left</p>
+        <h1>Wikipedia / Internet Ingestion</h1>
+      </div>
+      <div id="ingestion-panel" class="zone-panel" aria-live="polite"></div>
+    </aside>
+
     <div class="stage-shell">
       <canvas id="scene"></canvas>
     </div>
+
+    <aside class="fundament zone" aria-label="Emergent Categories">
+      <div class="zone-header">
+        <p class="eyebrow">Right</p>
+        <h1>Emergent Categories / Foundation</h1>
+      </div>
+      <div id="foundation-panel" class="zone-panel" aria-live="polite"></div>
+    </aside>
   </div>
 
   <script type="module" src="app.js"></script>
