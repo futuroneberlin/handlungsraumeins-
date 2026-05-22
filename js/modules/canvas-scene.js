@@ -180,6 +180,7 @@ export function createCanvasScene({
 
   return {
     async setFragments(fragments) {
+      viewport = resizeCanvasToDisplaySize(canvas);
       nodes = layoutSystem.createNodes(fragments, viewport.width, viewport.height);
       await buildRelations();
     },

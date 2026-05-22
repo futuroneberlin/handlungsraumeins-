@@ -12,7 +12,7 @@ Statt einer futuristischen Partikelästhetik entsteht eine reduzierte architekto
 
 ## Konzept
 
-Der Prototyp lädt PDF-Dateien aus `./pdf`, extrahiert Text über **PDF.js**, zerlegt ihn in lesbare Fragmente und legt diese als typografische Körper im Canvas ab. Ein langsames Bewegungssystem hält den Raum in beständiger Reorganisation. Parallel dazu werden wiederkehrende Begriffe erkannt und über die Wikipedia-Suche kontextualisiert. Wo Fragmente Begriffe teilen, entstehen relationale Linien und gelbe Markierungen.
+Der Prototyp lädt PDF-Dateien aus `./pdf`, extrahiert Text über **PDF.js**, zerlegt ihn in lesbare Fragmente und legt diese als typografische Körper im Canvas ab. Ein langsames Bewegungssystem hält den Raum in beständiger Reorganisation. Parallel dazu werden wiederkehrende Begriffe erkannt und über die Wikipedia-Suche kontextualisiert. Wo Fragmente Begriffe teilen, entstehen relationale Linien und gelbe Markierungen. Die PDF.js-Builds liegen lokal im Repository, damit der Raum auch ohne externe CDN-Abhängigkeit lesbar bleibt.
 
 Es handelt sich bewusst um ein stilles Interface:
 
@@ -31,7 +31,7 @@ Es handelt sich bewusst um ein stilles Interface:
 ├── style.css
 ├── app.js
 ├── js/
-│   └── modules/
+│   ├── modules/
 │       ├── canvas-scene.js
 │       ├── fragmenter.js
 │       ├── layout-system.js
@@ -39,6 +39,10 @@ Es handelt sich bewusst um ein stilles Interface:
 │       ├── pdf-loader.js
 │       ├── typography-system.js
 │       └── wikipedia.js
+│   └── vendor/
+│       ├── LICENSE-pdfjs-dist.txt
+│       ├── pdf.min.mjs
+│       └── pdf.worker.min.mjs
 └── pdf/
     ├── manifest.json
     └── handlungsraum-sample.pdf
