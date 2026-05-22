@@ -21,14 +21,7 @@ Wikipedia-Begriffe erzeugen relationale Verbindungen zwischen den Fragmenten.
 ÄSTHETISCHE PRINZIPIEN:
 - große negative Räume
 - industrielle Grotesk-Typografie
-- langsame Bewegungen
-- reduzierte Farbigkeit
-- architektonische Ordnung
-- minimale UI
-- keine futuristische Sci-Fi-Ästhetik
-- keine Partikelästhetik
-- Bewegung soll lesbar und ruhig sein
-- Weißraum ist zentral
+- UI experience
 
 TECHNISCHE ANFORDERUNGEN:
 - HTML5
