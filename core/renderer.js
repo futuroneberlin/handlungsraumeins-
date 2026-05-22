@@ -1,6 +1,6 @@
 function drawBackground(context, viewport) {
   const { width, height } = viewport;
-  context.fillStyle = "#050505";
+  context.fillStyle = "#111111";
   context.fillRect(0, 0, width, height);
 
   context.save();
@@ -43,7 +43,7 @@ function drawDebugOverlay(context, viewport, meta = {}) {
   const { width, height } = viewport;
 
   context.save();
-  context.fillStyle = "#050505";
+  context.fillStyle = "#111111";
   context.fillRect(0, 0, width, height);
 
   context.strokeStyle = "rgba(255, 255, 255, 0.28)";
@@ -186,6 +186,26 @@ function wrapText(context, text, maxWidth) {
   return lines;
 }
 
+function drawRoundedRectPath(context, x, y, width, height, radius) {
+  if (typeof context.roundRect === "function") {
+    context.roundRect(x, y, width, height, radius);
+    return;
+  }
+
+  const r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.lineTo(x + width - r, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + r);
+  context.lineTo(x + width, y + height - r);
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  context.lineTo(x + r, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - r);
+  context.lineTo(x, y + r);
+  context.quadraticCurveTo(x, y, x + r, y);
+  context.closePath();
+}
+
 function drawRelation(context, left, right, relation) {
   const alpha = relation.opacity || (relation.type === "wiki" ? 0.16 : relation.type === "semantic" ? 0.08 : 0.05);
   context.save();
@@ -270,21 +290,19 @@ function drawFragment(context, fragment, fontSize, accentStrength) {
     context.fillStyle = "rgba(255, 255, 255, 0.18)";
     context.strokeStyle = "rgba(20, 20, 20, 0.06)";
     context.lineWidth = 1;
-    context.beginPath();
-    context.roundRect(boxLeft, -boxHeight / 2, boxWidth, boxHeight, 999);
+    drawRoundedRectPath(context, boxLeft, -boxHeight / 2, boxWidth, boxHeight, 999);
     context.stroke();
     context.fillText(fragment.text, isPdfPhase ? textLeft : 0, 1);
     context.restore();
   }
 
   context.scale(depthScale, depthScale);
-  context.fillStyle = `rgba(8, 8, 8, ${0.76 * opacity})`;
+  context.fillStyle = `rgba(26, 24, 22, ${0.70 * opacity})`;
   context.strokeStyle = accentStrength > 0.55 ? "rgba(201, 162, 39, 0.12)" : `rgba(255, 255, 255, ${strokeAlpha})`;
   context.lineWidth = 1;
   context.shadowColor = `rgba(0, 0, 0, ${shadowOpacity + 0.08})`;
   context.shadowBlur = depthLayer === 0 ? 0 : 3;
-  context.beginPath();
-  context.roundRect(boxLeft, -boxHeight / 2, boxWidth, boxHeight, 999);
+  drawRoundedRectPath(context, boxLeft, -boxHeight / 2, boxWidth, boxHeight, 999);
   context.fill();
   context.stroke();
 
