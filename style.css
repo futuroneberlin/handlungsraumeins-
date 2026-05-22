@@ -1,9 +1,202 @@
+:root {
+  color-scheme: light;
+  --paper: #050505;
+  --paper-soft: #0c0c0c;
+  --ink: #efefef;
+  --muted: rgba(239, 239, 239, 0.58);
+  --line: rgba(255, 255, 255, 0.09);
+  --accent: #c9a227;
+  --accent-soft: rgba(201, 162, 39, 0.14);
+  --shadow: 0 24px 64px rgba(0, 0, 0, 0.42);
+  --radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
 body {
   margin: 0;
-  overflow: hidden;
-  background: black;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Space Grotesk", "Helvetica Neue", "Arial Narrow", "Segoe UI", sans-serif;
+  background: #050505;
+  color: var(--ink);
 }
 
 canvas {
+  font-family: "Space Grotesk", "Helvetica Neue", "Arial Narrow", sans-serif;
+}
+
+h1,
+.controls,
+.status-panel {
+  letter-spacing: -0.01em;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.hud {
+  display: none !important;
+}
+
+.hud > * {
+  pointer-events: auto;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0;
+  max-width: 15ch;
+  font-size: clamp(1.5rem, 2.5vw, 3rem);
+  line-height: 0.96;
+  font-weight: 600;
+  letter-spacing: -0.05em;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(14, 14, 14, 0.72);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.controls label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.controls select,
+.controls input,
+.controls button {
+  min-height: 2.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+
+.controls select {
+  min-width: 8.5rem;
+}
+
+.controls select,
+.controls input {
+  padding: 0 0.95rem;
+}
+
+.controls button {
+  padding: 0 1rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.controls button:hover {
+  background: rgba(201, 162, 39, 0.16);
+  transform: translateY(-1px);
+}
+
+.stage-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#scene {
   display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.status-panel {
+  display: none !important;
+  position: absolute;
+  right: clamp(1rem, 2vw, 1.6rem);
+  bottom: clamp(1rem, 2vw, 1.6rem);
+  z-index: 2;
+  width: min(24rem, calc(100vw - 2rem));
+  padding: 1rem 1.05rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: rgba(14, 14, 14, 0.76);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.status-panel p {
+  margin: 0 0 0.85rem;
+  font-size: 0.96rem;
+  line-height: 1.45;
+}
+
+.status-panel dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.status-panel dl div {
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
+.status-panel dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.status-panel dd {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+@media (max-width: 860px) {
+  .hud {
+    flex-direction: column;
+  }
+
+  .controls {
+    justify-content: flex-start;
+  }
+
+  .status-panel {
+    width: auto;
+    left: clamp(1rem, 2vw, 1.6rem);
+  }
 }

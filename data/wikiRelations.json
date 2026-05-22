@@ -1,0 +1,20 @@
+[
+  {
+    "source": "Kunst",
+    "target": "Erfahrung",
+    "weight": 0.8,
+    "label": "Dewey"
+  },
+  {
+    "source": "Praxis",
+    "target": "Relation",
+    "weight": 0.7,
+    "label": "Bertram"
+  },
+  {
+    "source": "Soziale Plastik",
+    "target": "Raum",
+    "weight": 0.9,
+    "label": "Beuys"
+  }
+]
