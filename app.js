@@ -4,7 +4,11 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// Theoriezeilen
+
+// -----------------------------
+// THEORIEFLUSS
+// -----------------------------
+
 const lines = [
   "Soziale Plastik beschreibt Gesellschaft als Formprozess.",
   "Raum entsteht durch Handlung.",
@@ -16,11 +20,13 @@ const lines = [
   "Gesellschaft wird als Prozess verstanden."
 ];
 
-// Sichtbare Zeilen
 let visibleLines = [];
-
-// Welche Zeile gerade erscheint
 let currentLine = 0;
+
+
+// -----------------------------
+// FUNDAMENT
+// -----------------------------
 
 const foundationWords = [
   "RAUM",
@@ -33,15 +39,21 @@ const foundationWords = [
 let visibleFoundation = [];
 let currentFoundation = 0;
 
-// Neue Zeile alle 700ms
+
+// -----------------------------
+// THEORIEFLUSS START
+// -----------------------------
+
 const interval = setInterval(() => {
 
   if (currentLine < lines.length) {
 
     visibleLines.push({
+
       text: lines[currentLine],
       x: 60,
-      y: 80 + currentLine * 40
+      y: 90 + currentLine * 42
+
     });
 
     currentLine++;
@@ -49,85 +61,17 @@ const interval = setInterval(() => {
   } else {
 
     clearInterval(interval);
-    
+
     startFoundation();
 
   }
 
 }, 700);
 
-function draw() {
 
-  // Hintergrund
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Titel
-  ctx.fillStyle = "white";
-  ctx.font = "bold 28px sans-serif";
-  ctx.fillText("THEORIEFLUSS", 60, 40);
-
-  // Theoriezeilen
-  ctx.font = "20px sans-serif";
-
-  visibleLines.forEach(line => {
-
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.fillText(line.text, line.x, line.y);
-
-  });
-
- visibleFoundation.forEach((word, index) => {
-
-  // Sehr langsame Bewegung
-  word.x += (word.targetX - word.x) * 0.008;
-  word.y += (word.targetY - word.y) * 0.008;
-
-  // Größe der Fundamentsteine
-  const blockWidth = 260;
-  const blockHeight = 90;
-
-  // Schwarzer Grundblock
-  ctx.fillStyle = "rgba(20,20,20,0.95)";
-
-  ctx.fillRect(
-    word.x,
-    word.y,
-    blockWidth,
-    blockHeight
-  );
-
-  // Dünne Kontur
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
-  ctx.lineWidth = 1;
-
-  ctx.strokeRect(
-    word.x,
-    word.y,
-    blockWidth,
-    blockHeight
-  );
-
-  // Typografie
-  ctx.fillStyle = "white";
-  ctx.font = "bold 30px sans-serif";
-
-  // Text mittig im Stein
-  const textWidth = ctx.measureText(word.text).width;
-
-  ctx.fillText(
-    word.text,
-    word.x + (blockWidth / 2) - (textWidth / 2),
-    word.y + 52
-  );
-
-});
-
-
-  requestAnimationFrame(draw);
-}
-
-draw();
+// -----------------------------
+// FUNDAMENT AUFBAU
+// -----------------------------
 
 function startFoundation() {
 
@@ -135,24 +79,25 @@ function startFoundation() {
 
     if (currentFoundation < foundationWords.length) {
 
-      // Größere architektonische Struktur
       const columns = 2;
 
-      const row = Math.floor(currentFoundation / columns);
-      const column = currentFoundation % columns;
+      const row =
+        Math.floor(currentFoundation / columns);
 
-      // Zentrum des Raumes
-      const centerX = canvas.width / 2;
+      const column =
+        currentFoundation % columns;
+
+      const centerX =
+        canvas.width / 2 - 220;
+
       const startY = 240;
 
-      // Große Abstände für Lesbarkeit
       const horizontalSpacing = 340;
       const verticalSpacing = 160;
 
-      // Fundamentposition
       const targetX =
         centerX +
-        (column - 0.5) * horizontalSpacing;
+        column * horizontalSpacing;
 
       const targetY =
         startY +
@@ -162,17 +107,12 @@ function startFoundation() {
 
         text: foundationWords[currentFoundation],
 
-        // Startposition leicht außen
         x: targetX + (Math.random() * 120 - 60),
+
         y: targetY + 140,
 
-        // Zielposition
         targetX,
-        targetY,
-
-        // Sehr langsame Bewegung
-        velocityX: 0,
-        velocityY: 0
+        targetY
 
       });
 
@@ -187,3 +127,132 @@ function startFoundation() {
   }, 1600);
 
 }
+
+
+// -----------------------------
+// RENDER
+// -----------------------------
+
+function draw() {
+
+  // Hintergrund
+  ctx.fillStyle = "black";
+
+  ctx.fillRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+
+  // -----------------------------
+  // TITEL
+  // -----------------------------
+
+  ctx.fillStyle = "white";
+  ctx.font = "bold 28px sans-serif";
+
+  ctx.fillText(
+    "THEORIEFLUSS",
+    60,
+    50
+  );
+
+
+  // -----------------------------
+  // THEORIEZEILEN
+  // -----------------------------
+
+  ctx.font = "20px sans-serif";
+
+  visibleLines.forEach(line => {
+
+    ctx.fillStyle =
+      "rgba(255,255,255,0.9)";
+
+    ctx.fillText(
+      line.text,
+      line.x,
+      line.y
+    );
+
+  });
+
+
+  // -----------------------------
+  // FUNDAMENT
+  // -----------------------------
+
+  visibleFoundation.forEach(word => {
+
+    // Langsame Bewegung
+    word.x +=
+      (word.targetX - word.x) * 0.008;
+
+    word.y +=
+      (word.targetY - word.y) * 0.008;
+
+
+    // Blockgröße
+    const blockWidth = 260;
+    const blockHeight = 90;
+
+
+    // Fundamentblock
+    ctx.fillStyle =
+      "rgba(20,20,20,0.96)";
+
+    ctx.fillRect(
+      word.x,
+      word.y,
+      blockWidth,
+      blockHeight
+    );
+
+
+    // Kontur
+    ctx.strokeStyle =
+      "rgba(255,255,255,0.08)";
+
+    ctx.lineWidth = 1;
+
+    ctx.strokeRect(
+      word.x,
+      word.y,
+      blockWidth,
+      blockHeight
+    );
+
+
+    // Text
+    ctx.fillStyle = "white";
+
+    ctx.font =
+      "bold 30px sans-serif";
+
+    const textWidth =
+      ctx.measureText(word.text).width;
+
+    ctx.fillText(
+      word.text,
+      word.x +
+      (blockWidth / 2) -
+      (textWidth / 2),
+
+      word.y + 54
+    );
+
+  });
+
+
+  requestAnimationFrame(draw);
+
+}
+
+
+// -----------------------------
+// START
+// -----------------------------
+
+draw();
