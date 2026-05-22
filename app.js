@@ -97,15 +97,21 @@ function startFoundation() {
 
     if (currentFoundation < foundationWords.length) {
 
-      visibleFoundation.push({
+      const row = Math.floor(currentFoundation / 2);
+const column = currentFoundation % 2;
 
-        text: foundationWords[currentFoundation],
+const baseX = canvas.width / 2;
+const baseY = 220;
 
-        x: canvas.width / 2 - 100,
+visibleFoundation.push({
 
-        y: 200 + currentFoundation * 60
+  text: foundationWords[currentFoundation],
 
-      });
+  x: baseX + (column * 180) - 90,
+
+  y: baseY + (row * 80)
+
+});
 
       currentFoundation++;
 
