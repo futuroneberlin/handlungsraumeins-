@@ -22,6 +22,17 @@ let visibleLines = [];
 // Welche Zeile gerade erscheint
 let currentLine = 0;
 
+const foundationWords = [
+  "RAUM",
+  "HANDLUNG",
+  "PRAXIS",
+  "GESELLSCHAFT",
+  "BEWEGUNG"
+];
+
+let visibleFoundation = [];
+let currentFoundation = 0;
+
 // Neue Zeile alle 700ms
 const interval = setInterval(() => {
 
@@ -38,6 +49,8 @@ const interval = setInterval(() => {
   } else {
 
     clearInterval(interval);
+    
+    startFoundation();
 
   }
 
@@ -64,7 +77,44 @@ function draw() {
 
   });
 
+  visibleFoundation.forEach(word => {
+
+  ctx.fillStyle = "rgba(255,255,255,1)";
+  ctx.font = "bold 34px sans-serif";
+
+  ctx.fillText(word.text, word.x, word.y);
+
+});
+
   requestAnimationFrame(draw);
 }
 
 draw();
+
+function startFoundation() {
+
+  const foundationInterval = setInterval(() => {
+
+    if (currentFoundation < foundationWords.length) {
+
+      visibleFoundation.push({
+
+        text: foundationWords[currentFoundation],
+
+        x: canvas.width / 2 - 100,
+
+        y: 200 + currentFoundation * 60
+
+      });
+
+      currentFoundation++;
+
+    } else {
+
+      clearInterval(foundationInterval);
+
+    }
+
+  }, 1200);
+
+}
