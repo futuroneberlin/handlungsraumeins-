@@ -79,10 +79,40 @@ function draw() {
 
   visibleFoundation.forEach(word => {
 
-  ctx.fillStyle = "rgba(255,255,255,1)";
-  ctx.font = "bold 34px sans-serif";
+  // Langsame Bewegung zur Zielposition
+  word.x += (word.targetX - word.x) * 0.01;
+  word.y += (word.targetY - word.y) * 0.01;
 
-  ctx.fillText(word.text, word.x, word.y);
+  // Schrift
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.font = "bold 42px sans-serif";
+
+  // Hintergrundfläche für Ruhe
+  const padding = 20;
+
+  const metrics = ctx.measureText(word.text);
+
+  const boxWidth = metrics.width + padding * 2;
+  const boxHeight = 60;
+
+  // Schwarze Fläche hinter Begriff
+  ctx.fillStyle = "rgba(0,0,0,0.85)";
+
+  ctx.fillRect(
+    word.x - padding,
+    word.y - 45,
+    boxWidth,
+    boxHeight
+  );
+
+  // Schrift
+  ctx.fillStyle = "white";
+
+  ctx.fillText(
+    word.text,
+    word.x,
+    word.y
+  );
 
 });
 
