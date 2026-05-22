@@ -49,8 +49,8 @@ function drawTheoryFlow(context, viewport, feedLines = []) {
 
   context.save();
   const fade = context.createLinearGradient(0, 0, columnWidth, 0);
-  fade.addColorStop(0, "rgba(17, 17, 18, 0.34)");
-  fade.addColorStop(0.5, "rgba(17, 17, 18, 0.16)");
+  fade.addColorStop(0, "rgba(17, 17, 18, 0.035)");
+  fade.addColorStop(0.5, "rgba(17, 17, 18, 0.018)");
   fade.addColorStop(1, "rgba(0, 0, 0, 0)");
   context.fillStyle = fade;
   context.fillRect(0, 0, columnWidth, height);
@@ -258,12 +258,13 @@ function drawRoundedRectPath(context, x, y, width, height, radius) {
 }
 
 function drawRelation(context, left, right, relation) {
-  const alpha = relation.opacity || (relation.type === "wiki" ? 0.16 : relation.type === "semantic" ? 0.08 : 0.05);
+  const baseAlpha = relation.opacity || (relation.type === "wiki" ? 0.38 : relation.type === "semantic" ? 0.3 : 0.26);
+  const alpha = Math.min(0.65, Math.max(0.25, baseAlpha));
   context.save();
   context.globalAlpha = alpha;
-  context.strokeStyle = relation.type === "wiki" ? "#c9a227" : "rgba(255, 255, 255, 0.22)";
-  context.lineWidth = Math.max(0.7, relation.score * 0.32);
-  context.setLineDash(relation.type === "wiki" ? [3, 14] : relation.type === "drift" ? [1, 12] : []);
+  context.strokeStyle = relation.type === "wiki" ? "rgba(201, 162, 39, 0.92)" : "rgba(255, 255, 255, 0.78)";
+  context.lineWidth = Math.max(1.1, relation.score * 0.42);
+  context.setLineDash(relation.type === "wiki" ? [4, 10] : relation.type === "drift" ? [2, 8] : []);
   context.beginPath();
   context.moveTo(left.x, left.y);
   context.lineTo(right.x, right.y);
@@ -402,7 +403,7 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
   const noiseLayer = createNoiseLayer(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)));
   if (noiseLayer) {
     context.save();
-    context.globalAlpha = 0.14;
+    context.globalAlpha = 0.06;
     context.drawImage(noiseLayer, 0, 0, width, height);
     context.restore();
   }
@@ -443,7 +444,7 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
   }
 
   context.save();
-  context.globalAlpha = 0.34;
+  context.globalAlpha = 0.16;
   context.strokeStyle = "rgba(255, 255, 255, 0.08)";
   context.lineWidth = 1;
   context.strokeRect(16, 16, width - 32, height - 32);

@@ -99,11 +99,12 @@ export function updateRelationLayer(relations, timestamp = now()) {
       const age = timestamp - relation.bornAt;
       const progress = Math.max(0, 1 - age / relation.ttl);
       const wobble = relation.type === "wiki" ? 1 : relation.type === "drift" ? 0.84 : 0.92;
+      const typeAlpha = relation.type === "wiki" ? 0.42 : relation.type === "drift" ? 0.34 : 0.3;
       return {
         ...relation,
         age,
         progress,
-        opacity: progress * (relation.type === "wiki" ? 0.24 : relation.type === "drift" ? 0.14 : 0.1) * wobble,
+        opacity: progress * typeAlpha * wobble,
       };
     })
     .filter((relation) => relation.progress > 0.14);
