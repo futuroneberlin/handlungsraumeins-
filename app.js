@@ -146,8 +146,8 @@ function startFoundation() {
       const startY = 240;
 
       // Große Abstände für Lesbarkeit
-      const horizontalSpacing = 320;
-      const verticalSpacing = 140;
+      const horizontalSpacing = 340;
+      const verticalSpacing = 160;
 
       // Fundamentposition
       const targetX =
@@ -163,8 +163,8 @@ function startFoundation() {
         text: foundationWords[currentFoundation],
 
         // Startposition leicht außen
-        x: targetX + (Math.random() * 40 - 20),
-        y: targetY + 80,
+        x: targetX + (Math.random() * 120 - 60),
+        y: targetY + 140,
 
         // Zielposition
         targetX,
