@@ -12,10 +12,10 @@ canvas.height = window.innerHeight;
 const searchTerms = [
   "Soziale Plastik",
   "socialsculpture",
-  "space"
+  "space",
   "Kunst",
   "art",
-  "artasexperience"
+  "artasexperience",
   
 ];
 
