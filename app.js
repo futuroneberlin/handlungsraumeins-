@@ -97,21 +97,46 @@ function startFoundation() {
 
     if (currentFoundation < foundationWords.length) {
 
-      const row = Math.floor(currentFoundation / 2);
-const column = currentFoundation % 2;
+      // Größere architektonische Struktur
+      const columns = 2;
 
-const baseX = canvas.width / 2;
-const baseY = 220;
+      const row = Math.floor(currentFoundation / columns);
+      const column = currentFoundation % columns;
 
-visibleFoundation.push({
+      // Zentrum des Raumes
+      const centerX = canvas.width / 2;
+      const startY = 240;
 
-  text: foundationWords[currentFoundation],
+      // Große Abstände für Lesbarkeit
+      const horizontalSpacing = 320;
+      const verticalSpacing = 140;
 
-  x: baseX + (column * 180) - 90,
+      // Fundamentposition
+      const targetX =
+        centerX +
+        (column - 0.5) * horizontalSpacing;
 
-  y: baseY + (row * 80)
+      const targetY =
+        startY +
+        row * verticalSpacing;
 
-});
+      visibleFoundation.push({
+
+        text: foundationWords[currentFoundation],
+
+        // Startposition leicht außen
+        x: targetX + (Math.random() * 40 - 20),
+        y: targetY + 80,
+
+        // Zielposition
+        targetX,
+        targetY,
+
+        // Sehr langsame Bewegung
+        velocityX: 0,
+        velocityY: 0
+
+      });
 
       currentFoundation++;
 
@@ -121,6 +146,6 @@ visibleFoundation.push({
 
     }
 
-  }, 1200);
+  }, 1600);
 
 }
