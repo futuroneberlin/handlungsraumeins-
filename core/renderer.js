@@ -143,6 +143,25 @@ function drawDebugOverlay(context, viewport, meta = {}) {
 let cachedNoiseLayer = null;
 let cachedNoiseKey = "";
 
+function fitText(context, text, maxWidth) {
+  if (!context || !text || !Number.isFinite(maxWidth) || maxWidth <= 0) {
+    return String(text || "");
+  }
+
+  const value = String(text);
+  if (context.measureText(value).width <= maxWidth) {
+    return value;
+  }
+
+  const ellipsis = "…";
+  let end = value.length;
+  while (end > 0 && context.measureText(`${value.slice(0, end)}${ellipsis}`).width > maxWidth) {
+    end -= 1;
+  }
+
+  return `${value.slice(0, Math.max(0, end))}${ellipsis}`;
+}
+
 function createNoiseLayer(width, height) {
   const key = `${width}x${height}`;
   if (cachedNoiseLayer && cachedNoiseKey === key) {
@@ -396,9 +415,20 @@ function drawFragment(context, fragment, fontSize, accentStrength) {
 }
 
 export function renderScene(context, viewport, fragments, relations, feedLines = []) {
-  const { width, height } = viewport;
+  const safeViewport = viewport && Number.isFinite(viewport.width) && Number.isFinite(viewport.height)
+    ? viewport
+    : { width: 0, height: 0 };
+  const safeFragments = Array.isArray(fragments) ? fragments : [];
+  const safeRelations = Array.isArray(relations) ? relations : [];
+  const safeFeedLines = Array.isArray(feedLines) ? feedLines : [];
+  const { width, height } = safeViewport;
+
+  if (!context || width <= 0 || height <= 0) {
+    return;
+  }
+
   context.clearRect(0, 0, width, height);
-  drawBackground(context, viewport);
+  drawBackground(context, safeViewport);
 
   const noiseLayer = createNoiseLayer(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)));
   if (noiseLayer) {
@@ -408,10 +438,10 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
     context.restore();
   }
 
-  drawTheoryFlow(context, viewport, feedLines);
+  drawTheoryFlow(context, safeViewport, safeFeedLines);
 
-  const fragmentByIndex = fragments;
-  const depthSortedFragments = sortFragmentsForDepth(fragments);
+  const fragmentByIndex = safeFragments;
+  const depthSortedFragments = sortFragmentsForDepth(safeFragments);
   const { background, middle, foreground } = splitByDepth(depthSortedFragments);
 
   for (const fragment of background) {
@@ -420,7 +450,7 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
     drawFragment(context, fragment, fontSize, fragment.keywords.length / 4);
   }
 
-  for (const relation of relations) {
+  for (const relation of safeRelations) {
     const left = fragmentByIndex[relation.leftIndex];
     const right = fragmentByIndex[relation.rightIndex];
     if (left && right && relation.progress > 0.05) {

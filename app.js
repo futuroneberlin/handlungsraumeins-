@@ -295,52 +295,76 @@ function tick(now) {
     return;
   }
 
-  const delta = Math.min(48, now - state.lastFrameAt || 16.67);
-  state.lastFrameAt = now;
+  try {
+    const delta = Math.min(48, now - state.lastFrameAt || 16.67);
+    state.lastFrameAt = now;
 
-  if (now >= state.nextFeedAt && state.feedQueue.length) {
-    const nextLine = state.feedQueue.shift();
-    if (nextLine) {
-      addFeedLine(nextLine);
+    if (now >= state.nextFeedAt && state.feedQueue.length) {
+      const nextLine = state.feedQueue.shift();
+      if (nextLine) {
+        addFeedLine(nextLine);
+      }
+      state.nextFeedAt = now + FEED_INTERVAL;
     }
-    state.nextFeedAt = now + FEED_INTERVAL;
+
+    for (const line of state.feedLines) {
+      line.age += delta / 1000;
+      line.y -= state.feedSpeed * (delta / 1000);
+      line.opacity = clamp(0.98 - line.age * 0.014, 0.1, 0.98);
+    }
+
+    state.feedLines = state.feedLines.filter((line) => line.y > -28);
+
+    if (now >= state.nextExtractionAt) {
+      const windowCorpus = [
+        ...state.corpus.slice(-10),
+        ...state.feedLines.slice(-16).map((line) => ({ source: line.source, text: line.text })),
+      ];
+      const newTerms = extractFoundationTerms(windowCorpus, 18);
+      appendFoundationTerms(newTerms);
+      state.nextExtractionAt = now + EXTRACTION_INTERVAL;
+    }
+
+    if (now >= state.nextRelationAt) {
+      rebuildSeedRelations();
+      state.nextRelationAt = now + RELATION_INTERVAL;
+    }
+
+    if (now >= state.nextWikiAt) {
+      void loadWikipediaPulse();
+      state.nextWikiAt = now + WIKI_INTERVAL;
+    }
+
+    updateFragments(state.fragments, state.viewport, now, delta);
+    updateSpatialMemory(state.fragments, delta);
+    state.relations = updateRelationLayer(state.relations, now);
+
+    try {
+      renderScene(context, state.viewport, state.fragments, state.relations, state.feedLines);
+    } catch (error) {
+      console.error("Render crash prevented:", error);
+      const viewport = state.viewport || { width: canvas.width, height: canvas.height };
+      const width = Number.isFinite(viewport.width) ? viewport.width : canvas.width;
+      const height = Number.isFinite(viewport.height) ? viewport.height : canvas.height;
+      context.save();
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.fillStyle = "#111111";
+      context.fillRect(0, 0, width, height);
+      context.restore();
+    }
+  } catch (error) {
+    console.error("Tick crash prevented:", error);
+    const viewport = state.viewport || { width: canvas.width, height: canvas.height };
+    const width = Number.isFinite(viewport.width) ? viewport.width : canvas.width;
+    const height = Number.isFinite(viewport.height) ? viewport.height : canvas.height;
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.fillStyle = "#111111";
+    context.fillRect(0, 0, width, height);
+    context.restore();
+  } finally {
+    requestAnimationFrame(tick);
   }
-
-  for (const line of state.feedLines) {
-    line.age += delta / 1000;
-    line.y -= state.feedSpeed * (delta / 1000);
-    line.opacity = clamp(0.98 - line.age * 0.014, 0.1, 0.98);
-  }
-
-  state.feedLines = state.feedLines.filter((line) => line.y > -28);
-
-  if (now >= state.nextExtractionAt) {
-    const windowCorpus = [
-      ...state.corpus.slice(-10),
-      ...state.feedLines.slice(-16).map((line) => ({ source: line.source, text: line.text })),
-    ];
-    const newTerms = extractFoundationTerms(windowCorpus, 18);
-    appendFoundationTerms(newTerms);
-    state.nextExtractionAt = now + EXTRACTION_INTERVAL;
-  }
-
-  if (now >= state.nextRelationAt) {
-    rebuildSeedRelations();
-    state.nextRelationAt = now + RELATION_INTERVAL;
-  }
-
-  if (now >= state.nextWikiAt) {
-    void loadWikipediaPulse();
-    state.nextWikiAt = now + WIKI_INTERVAL;
-  }
-
-  updateFragments(state.fragments, state.viewport, now, delta);
-  updateSpatialMemory(state.fragments, delta);
-  state.relations = updateRelationLayer(state.relations, now);
-
-  renderScene(context, state.viewport, state.fragments, state.relations, state.feedLines);
-
-  requestAnimationFrame(tick);
 }
 
 async function bootstrap() {
