@@ -39,6 +39,57 @@ function drawBackground(context, viewport) {
   context.restore();
 }
 
+function drawTheoryFlow(context, viewport, feedLines = []) {
+  const { width, height } = viewport;
+  const columnWidth = Math.min(420, Math.max(280, width * 0.3));
+  const gutter = Math.max(28, width * 0.05);
+  const baselineX = gutter;
+  const textOffsetX = 112;
+  const maxTextWidth = columnWidth - textOffsetX - 32;
+
+  context.save();
+  const fade = context.createLinearGradient(0, 0, columnWidth, 0);
+  fade.addColorStop(0, "rgba(17, 17, 18, 0.34)");
+  fade.addColorStop(0.5, "rgba(17, 17, 18, 0.16)");
+  fade.addColorStop(1, "rgba(0, 0, 0, 0)");
+  context.fillStyle = fade;
+  context.fillRect(0, 0, columnWidth, height);
+
+  context.strokeStyle = "rgba(255, 255, 255, 0.06)";
+  context.beginPath();
+  context.moveTo(columnWidth + 12, 0);
+  context.lineTo(columnWidth + 12, height);
+  context.stroke();
+
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+
+  for (const line of feedLines) {
+    const fadeTop = Math.min(1, Math.max(0, 1 - line.y / (height * 0.42)));
+    const fadeBottom = Math.min(1, Math.max(0, (height - line.y) / (height * 0.3)));
+    const alpha = Math.min(0.95, Math.max(0, (line.opacity || 0.9) * Math.min(fadeTop, fadeBottom) + 0.06));
+
+    if (alpha <= 0.02) {
+      continue;
+    }
+
+    const sourceLabel = String(line.source || "").toUpperCase();
+    const text = fitText(context, line.text, maxTextWidth);
+
+    context.save();
+    context.globalAlpha = alpha;
+    context.fillStyle = "rgba(238, 238, 238, 0.84)";
+    context.font = '500 12px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
+    context.fillText(sourceLabel, baselineX, line.y);
+    context.fillStyle = "rgba(245, 245, 245, 0.94)";
+    context.font = '400 13px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
+    context.fillText(text, baselineX + textOffsetX, line.y);
+    context.restore();
+  }
+
+  context.restore();
+}
+
 function drawDebugOverlay(context, viewport, meta = {}) {
   const { width, height } = viewport;
 
@@ -343,7 +394,7 @@ function drawFragment(context, fragment, fontSize, accentStrength) {
   context.restore();
 }
 
-export function renderScene(context, viewport, fragments, relations) {
+export function renderScene(context, viewport, fragments, relations, feedLines = []) {
   const { width, height } = viewport;
   context.clearRect(0, 0, width, height);
   drawBackground(context, viewport);
@@ -355,6 +406,8 @@ export function renderScene(context, viewport, fragments, relations) {
     context.drawImage(noiseLayer, 0, 0, width, height);
     context.restore();
   }
+
+  drawTheoryFlow(context, viewport, feedLines);
 
   const fragmentByIndex = fragments;
   const depthSortedFragments = sortFragmentsForDepth(fragments);

@@ -97,11 +97,5 @@ export function extractFoundationTerms(corpus, maxTerms = 18) {
     };
   });
 
-  console.log(
-    "semanticExtractor",
-    extracted.length,
-    extracted.map((item) => ({ text: item.text, group: item.semanticGroup, role: item.role, weight: item.weight })),
-  );
-
   return extracted;
 }

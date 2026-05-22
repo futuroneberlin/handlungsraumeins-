@@ -28,7 +28,7 @@ const EXTRACTION_INTERVAL = 2600;
 const RELATION_INTERVAL = 4200;
 const WIKI_INTERVAL = 7500;
 
-const canvas = document.getElementById("scene") || document.getElementById("canvas");
+const canvas = document.getElementById("scene");
 
 if (!canvas) {
   throw new Error("Canvas-Element nicht gefunden.");
@@ -196,57 +196,6 @@ function fitText(ctx, text, maxWidth) {
   return `${value.slice(0, Math.max(0, end))}${ellipsis}`;
 }
 
-function drawTheoryFlow(ctx, viewport, feedLines) {
-  const { width, height } = viewport;
-  const columnWidth = Math.min(420, Math.max(280, width * 0.3));
-  const gutter = Math.max(28, width * 0.05);
-  const baselineX = gutter;
-  const textOffsetX = 112;
-  const maxTextWidth = columnWidth - textOffsetX - 32;
-
-  ctx.save();
-  const fade = ctx.createLinearGradient(0, 0, columnWidth, 0);
-  fade.addColorStop(0, "rgba(17, 17, 18, 0.34)");
-  fade.addColorStop(0.62, "rgba(17, 17, 18, 0.18)");
-  fade.addColorStop(1, "rgba(0, 0, 0, 0)");
-  ctx.fillStyle = fade;
-  ctx.fillRect(0, 0, columnWidth, height);
-
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
-  ctx.beginPath();
-  ctx.moveTo(columnWidth + 12, 0);
-  ctx.lineTo(columnWidth + 12, height);
-  ctx.stroke();
-
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-
-  for (const line of feedLines) {
-    const fadeTop = clamp(1 - line.y / (height * 0.42), 0, 1);
-    const fadeBottom = clamp((height - line.y) / (height * 0.3), 0, 1);
-    const alpha = clamp((line.opacity || 0.9) * Math.min(fadeTop, fadeBottom) + 0.06, 0, 0.95);
-
-    if (alpha <= 0.02) {
-      continue;
-    }
-
-    const sourceLabel = String(line.source || "").toUpperCase();
-    const text = fitText(ctx, line.text, maxTextWidth);
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = "rgba(238, 238, 238, 0.84)";
-    ctx.font = '500 12px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
-    ctx.fillText(sourceLabel, baselineX, line.y);
-    ctx.fillStyle = "rgba(245, 245, 245, 0.94)";
-    ctx.font = '400 13px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
-    ctx.fillText(text, baselineX + textOffsetX, line.y);
-    ctx.restore();
-  }
-
-  ctx.restore();
-}
-
 async function loadInitialData() {
   const [theoryCorpus, parsedTexts, wikiSeed] = await Promise.all([
     loadTheoryCorpus(),
@@ -389,8 +338,7 @@ function tick(now) {
   updateSpatialMemory(state.fragments, delta);
   state.relations = updateRelationLayer(state.relations, now);
 
-  renderScene(context, state.viewport, state.fragments, state.relations);
-  drawTheoryFlow(context, state.viewport, state.feedLines);
+  renderScene(context, state.viewport, state.fragments, state.relations, state.feedLines);
 
   requestAnimationFrame(tick);
 }

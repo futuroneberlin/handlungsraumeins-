@@ -26,6 +26,5 @@ export function buildFoundationTerms(terms, viewport) {
     };
   });
 
-  console.log("foundationBuilder", built.length, built.map((term) => ({ text: term.text, role: term.role, opacity: term.opacity })));
   return built;
 }

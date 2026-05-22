@@ -35,20 +35,12 @@ export function createTimelineController({ phaseInterval = 1800, phaseIntervals 
         ...this.phases,
         ...queues,
       };
-      console.log("timelineController.setQueues", {
-        pdf: this.phases.pdf.length,
-        extraction: this.phases.extraction.length,
-        foundation: this.phases.foundation.length,
-        form: this.phases.form.length,
-        wiki: this.phases.wiki.length,
-      });
     },
     reset() {
       this.phase = "pdf";
       this.phaseIndex = 0;
       this.nextPlaybackAt = 0;
       this.switchingPlayback = false;
-      console.log("timelineController.reset", { phase: this.phase, phaseIndex: this.phaseIndex });
     },
     setPhase(phase, index = 0) {
       this.phase = phase;
@@ -95,7 +87,6 @@ export function createTimelineController({ phaseInterval = 1800, phaseIntervals 
 
       const next = nextPhaseName(this.phase);
       if (!next) {
-        console.log("timelineController.cycle", { phase: this.phase });
         return { type: "cycle" };
       }
 
@@ -103,14 +94,12 @@ export function createTimelineController({ phaseInterval = 1800, phaseIntervals 
         this.phase = "wiki-loading";
         this.phaseIndex = 0;
         this.scheduleNext(now, this.getInterval('wiki') * 1.5);
-        console.log("timelineController.transition", { from: this.phase, to: "wiki-loading", phaseIndex: this.phaseIndex });
         return { type: "wiki-request" };
       }
 
       this.phase = next;
       this.phaseIndex = 0;
       this.scheduleNext(now);
-      console.log("timelineController.transition", { to: next, phaseIndex: this.phaseIndex, nextPlaybackAt: this.nextPlaybackAt });
       return { type: "transition", phase: next };
     },
   };
