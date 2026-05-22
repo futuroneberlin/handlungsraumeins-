@@ -29,8 +29,7 @@ function clusterKeyFor(fragment) {
 }
 
 function createLanes(width) {
-  const margin = width * 0.1;
-  return [margin, width * 0.5, width - margin];
+  return [width * 0.37, width * 0.57, width * 0.78];
 }
 
 function chooseLane(fragment, foundation) {
@@ -49,7 +48,7 @@ export function createFoundationState(viewport) {
     height,
     lanes: createLanes(width),
     laneCounts: [0, 0, 0],
-    marginX: width * 0.1,
+    marginX: width * 0.22,
     marginY: height * 0.1,
     rowHeight: Math.max(52, Math.min(84, height * 0.09)),
     columnWidth: Math.max(260, Math.min(420, width * 0.26)),
@@ -74,6 +73,7 @@ export function placeFoundationFragment(fragment, index, viewport, foundation = 
 
   return {
     ...fragment,
+    index,
     x: laneX,
     y: rowY,
     targetX: laneX,

@@ -2,12 +2,28 @@ function relationScore(left, right) {
   const leftKeywords = left.keywords || [];
   const rightKeywords = right.keywords || [];
   const sharedKeywords = leftKeywords.filter((keyword) => rightKeywords.includes(keyword));
-  const proximityScore = Math.max(0, 1 - Math.abs(left.index - right.index) / 24);
+  const leftIndex = Number.isFinite(left.index) ? left.index : Number.isFinite(left.sequenceIndex) ? left.sequenceIndex : 0;
+  const rightIndex = Number.isFinite(right.index) ? right.index : Number.isFinite(right.sequenceIndex) ? right.sequenceIndex : 0;
+  const proximityScore = Math.max(0, 1 - Math.abs(leftIndex - rightIndex) / 24);
   const sourceScore = left.source === right.source ? 0.25 : 0;
   const sharedScore = sharedKeywords.length * 1.1;
   const massScore = Math.min(left.weight || 0.5, right.weight || 0.5) * 0.45;
+  const groupLeft = left.semanticGroup || null;
+  const groupRight = right.semanticGroup || null;
+  const groupScore = groupLeft && groupRight && groupLeft === groupRight ? 0.62 : 0;
+  const bridgePairs = new Set([
+    "Raum|Konstruktion",
+    "Konstruktion|Raum",
+    "Handlung|Gesellschaft",
+    "Gesellschaft|Handlung",
+    "Handlung|Kunst",
+    "Kunst|Handlung",
+    "Kunst|Gesellschaft",
+    "Gesellschaft|Kunst",
+  ]);
+  const bridgeScore = bridgePairs.has(`${groupLeft}|${groupRight}`) ? 0.34 : 0;
   return {
-    score: sharedScore + proximityScore + sourceScore + massScore,
+    score: sharedScore + proximityScore + sourceScore + massScore + groupScore + bridgeScore,
     sharedKeywords,
   };
 }

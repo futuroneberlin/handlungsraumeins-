@@ -1,53 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Handlungsraum</title>
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      overflow: hidden;
-    }
-    canvas {
-      display: block;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-  <canvas id="canvas"></canvas>
+  <div class="app-shell">
+    <div class="stage-shell">
+      <canvas id="scene"></canvas>
+    </div>
+  </div>
 
-  <script>
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const words = [
-      "SOZIALE PLASTIK",
-      "RAUM",
-      "HANDLUNG",
-      "PRAXIS",
-      "BEUYS"
-    ];
-
-    function draw() {
-      ctx.fillStyle = "black";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.fillStyle = "white";
-      ctx.font = "28px sans-serif";
-
-      words.forEach((w, i) => {
-        ctx.fillText(w, 80, 120 + i * 50);
-      });
-
-      requestAnimationFrame(draw);
-    }
-
-    draw();
-  </script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

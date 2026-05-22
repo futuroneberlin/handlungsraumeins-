@@ -25,6 +25,7 @@ body {
   font-family: "Space Grotesk", "Helvetica Neue", "Arial Narrow", "Segoe UI", sans-serif;
   background: #050505;
   color: var(--ink);
+  overflow: hidden;
 }
 
 canvas {

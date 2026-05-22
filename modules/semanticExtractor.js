@@ -1,6 +1,36 @@
 import { groupKeywordsBySemantic, semanticGroupOrder, assignKeywordToGroup } from "../core/semantics.js";
 import { extractKeywords, normalizeText } from "./textFragmenter.js";
 
+const RELEVANT_TERMS = new Set([
+  "raum",
+  "handlung",
+  "plastik",
+  "gesellschaft",
+  "verdichtung",
+  "bewegung",
+  "relation",
+  "architektur",
+  "praxis",
+  "form",
+  "energie",
+  "struktur",
+  "fundament",
+  "schichtung",
+  "erfahrung",
+  "kunst",
+  "prozess",
+  "leere",
+  "drift",
+  "körper",
+  "mauerwerk",
+  "typografie",
+  "sozial",
+  "soziale",
+  "beuys",
+  "dewey",
+  "bertram",
+]);
+
 function classifyRole(group, rank, total) {
   const centralGroups = ["Raum", "Handlung", "Gesellschaft", "Kunst", "Konstruktion"];
   if (centralGroups.includes(group)) return "central";
@@ -14,11 +44,23 @@ export function extractFoundationTerms(corpus, maxTerms = 18) {
   for (const entry of corpus) {
     const text = normalizeText(entry.text || "");
     const keywords = extractKeywords(text, 8);
-    for (const kw of keywords) candidate.push(kw);
+    for (const kw of keywords) {
+      const normalized = normalizeText(kw).toLowerCase();
+      if (normalized.length < 3) continue;
+      if (RELEVANT_TERMS.has(normalized) || assignKeywordToGroup(normalized)) {
+        candidate.push(normalized);
+      }
+    }
   }
 
   const freq = new Map();
   for (const k of candidate) freq.set(k, (freq.get(k) || 0) + 1);
+
+  if (!freq.size) {
+    for (const term of RELEVANT_TERMS) {
+      freq.set(term, 1);
+    }
+  }
 
   const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1]);
   const grouped = groupKeywordsBySemantic(sorted);
@@ -37,7 +79,7 @@ export function extractFoundationTerms(corpus, maxTerms = 18) {
   const extracted = chosen.slice(0, maxTerms).map((item, idx) => {
     const role = classifyRole(item.group, idx + 1, total);
     return {
-      id: `term-${item.keyword}-${idx}`,
+      id: `term-${item.keyword}`,
       text: item.keyword,
       keywords: [item.keyword],
       keyword: item.keyword,
