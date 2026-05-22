@@ -77,43 +77,51 @@ function draw() {
 
   });
 
-  visibleFoundation.forEach(word => {
+ visibleFoundation.forEach((word, index) => {
 
-  // Langsame Bewegung zur Zielposition
-  word.x += (word.targetX - word.x) * 0.01;
-  word.y += (word.targetY - word.y) * 0.01;
+  // Sehr langsame Bewegung
+  word.x += (word.targetX - word.x) * 0.008;
+  word.y += (word.targetY - word.y) * 0.008;
 
-  // Schrift
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.font = "bold 42px sans-serif";
+  // Größe der Fundamentsteine
+  const blockWidth = 260;
+  const blockHeight = 90;
 
-  // Hintergrundfläche für Ruhe
-  const padding = 20;
-
-  const metrics = ctx.measureText(word.text);
-
-  const boxWidth = metrics.width + padding * 2;
-  const boxHeight = 60;
-
-  // Schwarze Fläche hinter Begriff
-  ctx.fillStyle = "rgba(0,0,0,0.85)";
+  // Schwarzer Grundblock
+  ctx.fillStyle = "rgba(20,20,20,0.95)";
 
   ctx.fillRect(
-    word.x - padding,
-    word.y - 45,
-    boxWidth,
-    boxHeight
+    word.x,
+    word.y,
+    blockWidth,
+    blockHeight
   );
 
-  // Schrift
+  // Dünne Kontur
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 1;
+
+  ctx.strokeRect(
+    word.x,
+    word.y,
+    blockWidth,
+    blockHeight
+  );
+
+  // Typografie
   ctx.fillStyle = "white";
+  ctx.font = "bold 30px sans-serif";
+
+  // Text mittig im Stein
+  const textWidth = ctx.measureText(word.text).width;
 
   ctx.fillText(
     word.text,
-    word.x,
-    word.y
+    word.x + (blockWidth / 2) - (textWidth / 2),
+    word.y + 52
   );
 
+});
 });
 
   requestAnimationFrame(draw);
