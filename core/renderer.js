@@ -216,6 +216,16 @@ function splitByDepth(fragments) {
   const foreground = [];
 
   for (const fragment of fragments) {
+    if (fragment.phase === "foundation") {
+      foreground.push(fragment);
+      continue;
+    }
+
+    if (fragment.phase === "transformation") {
+      middle.push(fragment);
+      continue;
+    }
+
     const depth = fragment.depthLayer || 1;
     if (depth === 2) {
       background.push(fragment);
@@ -450,14 +460,6 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
     drawFragment(context, fragment, fontSize, fragment.keywords.length / 4);
   }
 
-  for (const relation of safeRelations) {
-    const left = fragmentByIndex[relation.leftIndex];
-    const right = fragmentByIndex[relation.rightIndex];
-    if (left && right && relation.progress > 0.05) {
-      drawRelation(context, left, right, relation);
-    }
-  }
-
   for (const fragment of middle) {
     const base = Math.max(12, Math.min(23, 10.2 + fragment.weight * 8.8 + (fragment.clusterMass || 0) * 0.06));
     let fontSize = Math.round(base * (fragment.sizeScale || 1));
@@ -471,6 +473,14 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
     const fontSize = Math.round(base * (fragment.sizeScale || 1));
     const accentStrength = fragment.keywords.length / 4;
     drawFragment(context, fragment, fontSize, accentStrength);
+  }
+
+  for (const relation of safeRelations) {
+    const left = fragmentByIndex[relation.leftIndex];
+    const right = fragmentByIndex[relation.rightIndex];
+    if (left && right && relation.progress > 0.05) {
+      drawRelation(context, left, right, relation);
+    }
   }
 
   context.save();

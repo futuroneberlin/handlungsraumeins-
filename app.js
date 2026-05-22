@@ -1,6 +1,6 @@
 import { createCanvasStage } from "./core/canvas.js";
 import { renderScene } from "./core/renderer.js";
-import { createFoundationState, placeFoundationFragment } from "./core/layout.js";
+import { createFoundationState } from "./core/layout.js";
 import { updateFragments } from "./core/movement.js";
 import { updateSpatialMemory } from "./core/spatialMemory.js";
 import { buildRelations, updateRelationLayer } from "./core/relations.js";
@@ -40,6 +40,8 @@ const context = stage.context;
 const state = {
   viewport: stage.getViewport(),
   corpus: [],
+  ingestionQueue: [],
+  transformationQueue: [],
   feedQueue: [],
   feedLines: [],
   baseTerms: [],
@@ -57,6 +59,7 @@ const state = {
   wikiCursor: 0,
   feedSpeed: 16,
   running: true,
+  nextTransformationAt: 0,
 };
 
 function clamp(value, min, max) {
@@ -111,14 +114,8 @@ function addFeedLine(entry) {
   }
 }
 
-function seedFeed(lines) {
-  for (const line of lines.slice(0, 18)) {
-    addFeedLine(line);
-  }
-}
-
-function appendFoundationTerms(candidates) {
-  let appended = false;
+function queueTransformationTerms(candidates) {
+  let queued = false;
 
   for (const term of candidates) {
     const normalized = normalizeKey(term.text || term.keyword);
@@ -127,26 +124,51 @@ function appendFoundationTerms(candidates) {
     }
 
     state.termKeys.add(normalized);
-    const fragment = {
+    state.transformationQueue.push({
       ...term,
       id: normalized,
       keyword: term.keyword || term.text,
-      text: String(term.text || term.keyword || normalized).toUpperCase(),
+      text: String(term.text || term.keyword || normalized),
       source: term.source || "theorie",
       age: 0,
       opacity: term.opacity ?? 0.92,
       memoryOpacity: term.memoryOpacity ?? 0.72,
-    };
-
-    state.baseTerms.push(fragment);
-    const placed = placeFoundationFragment(fragment, state.baseTerms.length - 1, state.viewport, state.foundationState);
-    state.fragments.push(placed);
-    appended = true;
+    });
+    queued = true;
   }
 
-  if (appended) {
-    rebuildSeedRelations();
-  }
+  return queued;
+}
+
+function createTransformationFragment(term, index) {
+  const lane = Number.isInteger(term.preferredLane) ? term.preferredLane : 1;
+  const rowIndex = Number.isInteger(term.fragmentOrder) ? term.fragmentOrder : index;
+  const spawnX = state.viewport.width * 0.12 + (index % 4) * 18;
+  const spawnY = state.viewport.height * 0.24 + (rowIndex % 6) * 18;
+
+  return {
+    ...term,
+    phase: "transformation",
+    category: term.semanticGroup || term.role || "raw",
+    links: [],
+    lane,
+    rowIndex,
+    x: spawnX,
+    y: spawnY,
+    targetX: state.viewport.width * 0.52,
+    targetY: state.viewport.height * 0.48 + (rowIndex % 5) * 10,
+    anchorX: state.viewport.width * 0.52,
+    anchorY: state.viewport.height * 0.48,
+    clusterCenterX: state.viewport.width * 0.52,
+    clusterCenterY: state.viewport.height * 0.48,
+    spawnX,
+    spawnY,
+    depthLayer: 1,
+    opacity: term.opacity ?? 0.82,
+    memoryOpacity: term.memoryOpacity ?? 0.7,
+    mass: Math.max(0.9, term.weight || 1),
+    age: 0,
+  };
 }
 
 function rebuildSeedRelations() {
@@ -210,13 +232,10 @@ async function loadInitialData() {
 
   state.corpus = mergedCorpus;
   state.feedQueue = buildFeedEntries(mergedCorpus);
+  state.ingestionQueue = [...state.feedQueue];
   state.wikiSeed = Array.isArray(wikiSeed) ? wikiSeed : [];
 
-  seedFeed(state.feedQueue);
-
-  const initialTerms = extractFoundationTerms(mergedCorpus, 16);
-  appendFoundationTerms(initialTerms);
-  rebuildSeedRelations();
+  state.nextTransformationAt = performance.now() + 600;
 }
 
 async function loadWikipediaPulse() {
@@ -235,22 +254,16 @@ async function loadWikipediaPulse() {
 
     state.wikiEntries = [entry, ...state.wikiEntries].slice(0, 6);
     const summaryLine = entry.summary ? `${entry.title}: ${entry.summary}` : entry.title;
-    addFeedLine({
-      id: `wiki-${normalizeKey(entry.title)}`,
+    state.ingestionQueue.push({
+      id: `wiki-${normalizeKey(entry.title)}-${Date.now()}`,
       source: entry.title,
       text: summaryLine,
+      rawText: entry.summary || entry.title,
+      category: entry.title,
+      phase: "ingestion",
       age: 0,
-      opacity: 0.96,
-      y: state.viewport.height - 48,
+      opacity: 0.94,
     });
-
-    const theoryWindow = [
-      ...state.corpus.slice(-8),
-      ...state.feedLines.slice(-12).map((line) => ({ source: line.source, text: line.text })),
-    ];
-    const extracted = extractFoundationTerms(theoryWindow, 18);
-    appendFoundationTerms(extracted);
-    rebuildSeedRelations();
   } catch {
     return;
   }
@@ -302,8 +315,8 @@ function tick(now) {
     const delta = Math.min(48, now - state.lastFrameAt || 16.67);
     state.lastFrameAt = now;
 
-    if (now >= state.nextFeedAt && state.feedQueue.length) {
-      const nextLine = state.feedQueue.shift();
+    if (now >= state.nextFeedAt && state.ingestionQueue.length) {
+      const nextLine = state.ingestionQueue.shift();
       if (nextLine) {
         addFeedLine(nextLine);
       }
@@ -321,11 +334,50 @@ function tick(now) {
     if (now >= state.nextExtractionAt) {
       const windowCorpus = [
         ...state.corpus.slice(-10),
+        ...state.ingestionQueue.slice(-10).map((line) => ({ source: line.source, text: line.text })),
         ...state.feedLines.slice(-16).map((line) => ({ source: line.source, text: line.text })),
       ];
       const newTerms = extractFoundationTerms(windowCorpus, 18);
-      appendFoundationTerms(newTerms);
+      queueTransformationTerms(newTerms);
       state.nextExtractionAt = now + EXTRACTION_INTERVAL;
+    }
+
+    if (now >= state.nextTransformationAt && state.transformationQueue.length) {
+      const nextTerm = state.transformationQueue.shift();
+      if (nextTerm) {
+        state.fragments.push(createTransformationFragment(nextTerm, state.fragments.length));
+      }
+      state.nextTransformationAt = now + 480;
+    }
+
+    const semanticCounts = new Map();
+    for (const fragment of state.fragments) {
+      const key = fragment.semanticGroup || fragment.category || fragment.role || "general";
+      semanticCounts.set(key, (semanticCounts.get(key) || 0) + 1);
+    }
+
+    for (const fragment of state.fragments) {
+      fragment.age = (fragment.age || 0) + delta / 1000;
+      const groupKey = fragment.semanticGroup || fragment.category || fragment.role || "general";
+      const groupCount = semanticCounts.get(groupKey) || 0;
+      const relationDensity = state.relations.filter((relation) => {
+        const left = state.fragments[relation.leftIndex];
+        const right = state.fragments[relation.rightIndex];
+        return left && right && (left.semanticGroup === groupKey || right.semanticGroup === groupKey);
+      }).length;
+
+      if (fragment.phase !== "foundation" && groupCount >= 3 && relationDensity >= 2 && fragment.age > 6) {
+        fragment.phase = "foundation";
+        fragment.depthLayer = 2;
+        fragment.text = String(fragment.semanticGroup || fragment.category || fragment.text || fragment.keyword || "KATEGORIE").toUpperCase();
+        fragment.keywords = [fragment.semanticGroup || fragment.category || fragment.keyword || fragment.text];
+        fragment.targetX = state.viewport.width * 0.82;
+        fragment.anchorX = fragment.targetX;
+        fragment.clusterCenterX = fragment.targetX;
+        fragment.targetY = state.foundationState.marginY + (fragment.rowIndex || 0) * state.foundationState.rowHeight;
+        fragment.anchorY = fragment.targetY;
+        fragment.clusterCenterY = fragment.targetY;
+      }
     }
 
     if (now >= state.nextRelationAt) {
