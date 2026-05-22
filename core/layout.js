@@ -53,6 +53,9 @@ export function createFoundationState(viewport) {
     rowHeight: Math.max(52, Math.min(84, height * 0.09)),
     columnWidth: Math.max(260, Math.min(420, width * 0.26)),
     textWidth: Math.max(220, Math.min(360, width * 0.24)),
+    leftSpawnX: width * 0.12,
+    centerFlowX: width * 0.52,
+    rightFoundationX: width * 0.82,
   };
 }
 
@@ -70,18 +73,30 @@ export function placeFoundationFragment(fragment, index, viewport, foundation = 
   const depthLayer = lane === 1 ? 1 : lane === 0 ? 0 : 2;
   const sequenceOffset = index * 0.35;
   const widthBias = fragment.weight || 0.5;
+  const spawnX = foundation.leftSpawnX + (index % 5) * 22 + lane * 8;
+  const spawnY = rowY + (lane - 1) * 12;
+  const targetX = lane === 0
+    ? foundation.centerFlowX - foundation.width * 0.04
+    : lane === 1
+      ? foundation.centerFlowX + foundation.width * 0.02
+      : foundation.rightFoundationX;
+  const targetY = rowY;
 
   return {
     ...fragment,
     index,
-    x: laneX,
-    y: rowY,
-    targetX: laneX,
-    targetY: rowY,
-    anchorX: laneX,
-    anchorY: rowY,
-    clusterCenterX: laneX,
-    clusterCenterY: rowY,
+    category: fragment.category || fragment.semanticGroup || fragment.role || "general",
+    links: Array.isArray(fragment.links) ? fragment.links : [],
+    x: spawnX,
+    y: spawnY,
+    targetX,
+    targetY,
+    anchorX: targetX,
+    anchorY: targetY,
+    clusterCenterX: targetX,
+    clusterCenterY: targetY,
+    spawnX,
+    spawnY,
     depthLayer,
     lane,
     sequenceIndex: index,

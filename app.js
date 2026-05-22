@@ -1,6 +1,6 @@
 import { createCanvasStage } from "./core/canvas.js";
 import { renderScene } from "./core/renderer.js";
-import { createFoundationState, layoutFragments, placeFoundationFragment } from "./core/layout.js";
+import { createFoundationState, placeFoundationFragment } from "./core/layout.js";
 import { updateFragments } from "./core/movement.js";
 import { updateSpatialMemory } from "./core/spatialMemory.js";
 import { buildRelations, updateRelationLayer } from "./core/relations.js";
@@ -260,23 +260,26 @@ function resize() {
   stage.resize();
   state.viewport = stage.getViewport();
 
-  const previousFragments = new Map(state.fragments.map((fragment) => [fragment.id, fragment]));
   state.foundationState = createFoundationState(state.viewport);
-  state.fragments = layoutFragments(state.baseTerms, state.viewport).map((fragment) => {
-    const previous = previousFragments.get(fragment.id);
-    if (!previous) {
-      return fragment;
-    }
+  state.fragments = state.fragments.map((fragment) => {
+    const lane = Number.isInteger(fragment.lane) ? fragment.lane : 1;
+    const rowIndex = Number.isInteger(fragment.rowIndex) ? fragment.rowIndex : 0;
+    const targetX = lane === 0
+      ? state.foundationState.centerFlowX - state.foundationState.width * 0.04
+      : lane === 1
+        ? state.foundationState.centerFlowX + state.foundationState.width * 0.02
+        : state.foundationState.rightFoundationX;
+    const targetY = state.foundationState.marginY + rowIndex * state.foundationState.rowHeight;
 
     return {
       ...fragment,
-      x: previous.x,
-      y: previous.y,
-      vx: previous.vx || 0,
-      vy: previous.vy || 0,
-      age: previous.age || fragment.age,
-      opacity: previous.opacity || fragment.opacity,
-      memoryOpacity: previous.memoryOpacity || fragment.memoryOpacity,
+      targetX,
+      targetY,
+      anchorX: targetX,
+      anchorY: targetY,
+      clusterCenterX: targetX,
+      clusterCenterY: targetY,
+      layoutWidth: state.foundationState.textWidth,
     };
   });
 
@@ -335,7 +338,7 @@ function tick(now) {
       state.nextWikiAt = now + WIKI_INTERVAL;
     }
 
-    updateFragments(state.fragments, state.viewport, now, delta);
+    updateFragments(state.fragments, state.relations, state.viewport, now, delta);
     updateSpatialMemory(state.fragments, delta);
     state.relations = updateRelationLayer(state.relations, now);
 
