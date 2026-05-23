@@ -4,8 +4,8 @@ function drawBackground(context, viewport) {
   context.fillRect(0, 0, width, height);
 
   context.save();
-  context.globalAlpha = 0.3;
-  context.strokeStyle = "rgba(255, 255, 255, 0.03)";
+  context.globalAlpha = 0.18;
+  context.strokeStyle = "rgba(255, 255, 255, 0.022)";
   context.lineWidth = 1;
 
   const verticalGuides = [width * 0.18, width * 0.5, width * 0.82];
@@ -26,8 +26,8 @@ function drawBackground(context, viewport) {
   }
 
   context.save();
-  context.globalAlpha = 0.42;
-  context.strokeStyle = "rgba(201, 162, 39, 0.08)";
+  context.globalAlpha = 0.24;
+  context.strokeStyle = "rgba(201, 162, 39, 0.055)";
   context.lineWidth = 1;
   context.beginPath();
   context.moveTo(width * 0.14, height * 0.1);
@@ -49,13 +49,13 @@ function drawTheoryFlow(context, viewport, feedLines = []) {
 
   context.save();
   const fade = context.createLinearGradient(0, 0, columnWidth, 0);
-  fade.addColorStop(0, "rgba(17, 17, 18, 0.022)");
-  fade.addColorStop(0.5, "rgba(17, 17, 18, 0.01)");
+  fade.addColorStop(0, "rgba(17, 17, 18, 0.014)");
+  fade.addColorStop(0.5, "rgba(17, 17, 18, 0.006)");
   fade.addColorStop(1, "rgba(0, 0, 0, 0)");
   context.fillStyle = fade;
   context.fillRect(0, 0, columnWidth, height);
 
-  context.strokeStyle = "rgba(255, 255, 255, 0.06)";
+  context.strokeStyle = "rgba(255, 255, 255, 0.045)";
   context.beginPath();
   context.moveTo(columnWidth + 12, 0);
   context.lineTo(columnWidth + 12, height);
@@ -187,7 +187,7 @@ function createNoiseLayer(width, height) {
     for (let x = 0; x < width; x += spacing) {
       const value = (x * 12.9898 + y * 78.233 + (x * y) * 0.0003) % 1;
       if (value > 0.84) {
-        context.globalAlpha = 0.02 + value * 0.06;
+        context.globalAlpha = 0.01 + value * 0.035;
         context.fillRect(x, y, 1, 1);
       }
     }
@@ -322,9 +322,13 @@ function drawRelation(context, left, right, relation, interactionState = {}) {
   const alpha = isSelectedLink ? 0.82 : isNeighborLink ? 0.48 : Math.min(0.65, Math.max(0.25, baseAlpha));
   context.save();
   context.globalAlpha = alpha;
-  context.strokeStyle = relation.type === "wiki" ? "rgba(201, 162, 39, 0.92)" : "rgba(255, 255, 255, 0.78)";
-  context.lineWidth = Math.max(1.1, relation.score * 0.42);
-  context.setLineDash(relation.type === "wiki" ? [4, 10] : relation.type === "drift" ? [2, 8] : []);
+  context.strokeStyle = relation.type === "wiki" || relation.type === "theory"
+    ? "rgba(201, 162, 39, 0.92)"
+    : relation.type === "category"
+      ? "rgba(255, 255, 255, 0.82)"
+      : "rgba(255, 255, 255, 0.76)";
+  context.lineWidth = Math.max(1.05, 0.9 + relation.score * 0.32);
+  context.setLineDash(relation.type === "wiki" ? [4, 10] : relation.type === "drift" ? [2, 8] : relation.type === "theory" ? [7, 7] : []);
   context.beginPath();
   context.moveTo(left.x, left.y);
   context.lineTo(right.x, right.y);
@@ -497,7 +501,7 @@ export function renderScene(context, viewport, graphStateOrFragments, relations,
   const noiseLayer = createNoiseLayer(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)));
   if (noiseLayer) {
     context.save();
-    context.globalAlpha = 0.06;
+    context.globalAlpha = 0.03;
     context.drawImage(noiseLayer, 0, 0, width, height);
     context.restore();
   }
@@ -539,13 +543,13 @@ export function renderScene(context, viewport, graphStateOrFragments, relations,
   }
 
   context.save();
-  context.globalAlpha = 0.11;
-  context.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  context.globalAlpha = 0.06;
+  context.strokeStyle = "rgba(255, 255, 255, 0.06)";
   context.lineWidth = 1;
   context.strokeRect(16, 16, width - 32, height - 32);
-  context.fillStyle = "rgba(201, 162, 39, 0.12)";
+  context.fillStyle = "rgba(201, 162, 39, 0.08)";
   context.fillRect(width * 0.13, 22, 1, height - 44);
-  context.fillStyle = "rgba(245, 245, 245, 0.7)";
+  context.fillStyle = "rgba(245, 245, 245, 0.62)";
   context.font = '500 12px "Space Grotesk", "Helvetica Neue", "Arial Narrow", sans-serif';
   context.textAlign = "left";
   context.fillText("THEORY FLOW / ARCHITECTURAL SETTING", 28, 34);

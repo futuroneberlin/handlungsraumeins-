@@ -51,12 +51,14 @@ function estimateCollisionRadius(fragment) {
   const lineCount = Math.max(1, Math.ceil(text.length / Math.max(16, Math.round(layoutWidth / 11))));
   const boxHeight = Math.max(26, lineCount * 19 + 18);
   const boxWidth = Math.max(80, layoutWidth);
+  const sizeScale = fragment.sizeScale || 1;
+  const padding = fragment.phase === "foundation" ? 1.16 : fragment.depthLayer === 0 ? 1.08 : 1;
 
   if (fragment.isTheoryCore) {
-    return Math.max(128, Math.hypot(boxWidth, boxHeight) * 0.42);
+    return Math.max(140, Math.hypot(boxWidth, boxHeight) * 0.46 * sizeScale);
   }
 
-  return Math.max(24, Math.hypot(boxWidth, boxHeight) * 0.28);
+  return Math.max(28, Math.hypot(boxWidth, boxHeight) * 0.31 * sizeScale * padding);
 }
 
 export function updateFragments(fragments, relations, viewport, time, delta) {
@@ -76,7 +78,7 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
   const leftX = width * 0.14;
   const centerLaneX = width * 0.5;
   const rightX = width * 0.82;
-  const minDistance = Math.max(32, Math.min(width, height) * 0.05);
+  const minDistance = Math.max(38, Math.min(width, height) * 0.06);
 
   buildRelationLookup(safeFragments, safeRelations);
 
@@ -131,8 +133,8 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
     const distance = Math.max(0.001, Math.hypot(dx, dy));
     const relationStrength = Math.min(1.8, Math.max(0.6, relation.score || 1));
     const progress = relation.progress ?? 1;
-    const idealDistance = clamp(230 - relationStrength * 22, 70, 220);
-    const force = (distance - idealDistance) * 0.0005 * relationStrength * (0.55 + progress * 0.45);
+    const idealDistance = clamp(relation.type === "theory" ? 180 : relation.type === "wiki" ? 170 : 210 - relationStrength * 20, 82, 220);
+    const force = (distance - idealDistance) * 0.00058 * relationStrength * (0.55 + progress * 0.45);
     const nx = dx / distance;
     const ny = dy / distance;
 
@@ -152,7 +154,7 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
       const collisionDistance = Math.max(minDistance, estimateCollisionRadius(left) + estimateCollisionRadius(right));
 
       if (distance >= collisionDistance) {
-        const repel = 0.018 / (distance * distance);
+        const repel = 0.024 / (distance * distance);
         const nx = dx / distance;
         const ny = dy / distance;
         left.vx -= nx * repel;
@@ -165,7 +167,7 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
       const sharedCluster = left.clusterKey === right.clusterKey;
       const depthGap = Math.abs((left.depthLayer || 1) - (right.depthLayer || 1));
       const overlap = (collisionDistance - distance) / collisionDistance;
-      const push = overlap * (sharedCluster ? 0.012 : 0.017) * (1 + depthGap * 0.14);
+  const push = overlap * (sharedCluster ? 0.02 : 0.028) * (1 + depthGap * 0.18);
       const nx = dx / distance;
       const ny = dy / distance;
       left.vx -= nx * push;
@@ -186,8 +188,8 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
 
     fragment.x += fragment.vx * seconds * 60;
     fragment.y += fragment.vy * seconds * 60;
-    fragment.vx *= 0.985;
-    fragment.vy *= 0.985;
+    fragment.vx *= 0.981;
+    fragment.vy *= 0.981;
 
     fragment.z = clamp((fragment.z ?? fragment.depthLayer ?? 1) + (fragment.foregroundBias || 0) * 0.0012 - seconds * 0.0008, 0, 2);
     const fadeRate = depthLayer === 2 ? 0.0016 : depthLayer === 0 ? 0.0009 : 0.0011;

@@ -1,4 +1,4 @@
-import { explainTheoryConnection, theoryAffinity } from "./theoryModel.js";
+import { explainTheoryConnection, theoryAffinity, theoryResonanceTerms } from "./theoryModel.js";
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -12,28 +12,61 @@ function normalizeTokenList(values = []) {
     .filter(Boolean))];
 }
 
+function tokenize(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part && part.length > 2 && !["the", "and", "for", "with", "from", "that", "this", "into", "over", "about"].includes(part));
+}
+
+function collectSignals(node) {
+  return normalizeTokenList([
+    node?.keywords || [],
+    node?.keyword,
+    node?.text,
+    node?.title,
+    node?.wikiSummary,
+    node?.wikiCategories || node?.categories || [],
+    node?.wikiLinks || [],
+    node?.category,
+    node?.semanticGroup,
+    node?.role,
+  ]);
+}
+
 function overlap(leftValues = [], rightValues = []) {
   const rightSet = new Set(normalizeTokenList(rightValues));
   return normalizeTokenList(leftValues).filter((value) => rightSet.has(value));
 }
 
 function relationScore(left, right) {
-  const leftKeywords = normalizeTokenList([left.keywords || [], left.keyword, left.text, left.title]);
-  const rightKeywords = normalizeTokenList([right.keywords || [], right.keyword, right.text, right.title]);
+  const leftKeywords = collectSignals(left);
+  const rightKeywords = collectSignals(right);
   const sharedKeywords = overlap(leftKeywords, rightKeywords);
   const sharedCategories = overlap(left.wikiCategories || left.categories || [], right.wikiCategories || right.categories || []);
   const sharedLinks = overlap(left.wikiLinks || [], right.wikiLinks || []);
+  const leftTokens = normalizeTokenList(leftKeywords.flatMap((value) => tokenize(value)));
+  const rightTokens = normalizeTokenList(rightKeywords.flatMap((value) => tokenize(value)));
+  const sharedTokens = overlap(leftTokens, rightTokens);
+  const leftTheorySignals = theoryResonanceTerms(left);
+  const rightTheorySignals = theoryResonanceTerms(right);
+  const sharedTheorySignals = overlap(leftTheorySignals, rightTheorySignals);
   const leftIndex = Number.isFinite(left.index) ? left.index : Number.isFinite(left.sequenceIndex) ? left.sequenceIndex : 0;
   const rightIndex = Number.isFinite(right.index) ? right.index : Number.isFinite(right.sequenceIndex) ? right.sequenceIndex : 0;
   const proximityScore = Math.max(0, 1 - Math.abs(leftIndex - rightIndex) / 24);
+  const laneScore = left.lane === right.lane ? 0.24 : 0;
+  const phaseScore = left.phase === right.phase ? 0.2 : 0;
   const sourceScore = left.source === right.source ? 0.25 : 0;
-  const sharedScore = sharedKeywords.length * 0.86;
-  const categoryScore = sharedCategories.length * 1.25;
-  const linkScore = sharedLinks.length * 1.1;
+  const sharedScore = sharedKeywords.length * 0.82;
+  const tokenScore = sharedTokens.length * 0.32;
+  const categoryScore = sharedCategories.length * 1.18;
+  const linkScore = sharedLinks.length * 1.06;
   const massScore = Math.min(left.weight || 0.5, right.weight || 0.5) * 0.45;
   const groupLeft = left.semanticGroup || null;
   const groupRight = right.semanticGroup || null;
-  const groupScore = groupLeft && groupRight && groupLeft === groupRight ? 0.62 : 0;
+  const groupScore = groupLeft && groupRight && groupLeft === groupRight ? 0.72 : 0;
   const bridgePairs = new Set([
     "Raum|Konstruktion",
     "Konstruktion|Raum",
@@ -47,15 +80,20 @@ function relationScore(left, right) {
   const bridgeScore = bridgePairs.has(`${groupLeft}|${groupRight}`) ? 0.34 : 0;
   const theoryLeft = theoryAffinity(left);
   const theoryRight = theoryAffinity(right);
-  const theoryBoost = Math.min(1.8, (theoryLeft + theoryRight) * 0.22);
+  const theoryBoost = Math.min(2.2, (theoryLeft + theoryRight) * 0.22 + sharedTheorySignals.length * 0.48);
   const repetitionScore = Math.min(1.2, Math.min(left.appearanceCount || 1, right.appearanceCount || 1) * 0.12);
+  const semanticSimilarity = Math.min(1.8, (sharedScore * 0.75) + (tokenScore * 0.85) + (categoryScore * 0.3) + (linkScore * 0.25));
+  const contextualProximity = Math.min(1.4, (proximityScore * 1.05) + laneScore + phaseScore + sourceScore * 0.8);
   return {
-    score: sharedScore + categoryScore + linkScore + proximityScore + sourceScore + massScore + groupScore + bridgeScore + theoryBoost + repetitionScore,
+    score: semanticSimilarity + categoryScore + linkScore + contextualProximity + massScore + groupScore + bridgeScore + theoryBoost + repetitionScore,
     sharedKeywords,
     sharedCategories,
     sharedLinks,
+    sharedTokens,
+    sharedTheorySignals,
     theoryBoost,
     repetitionScore,
+    contextualProximity,
   };
 }
 
@@ -95,26 +133,32 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
     for (let rightIndex = leftIndex + 1; rightIndex < safeNodes.length; rightIndex += 1) {
       const left = safeNodes[leftIndex];
       const right = safeNodes[rightIndex];
-      const { score, sharedKeywords, sharedCategories, sharedLinks, theoryBoost, repetitionScore } = relationScore(left, right);
+      const { score, sharedKeywords, sharedCategories, sharedLinks, sharedTokens, sharedTheorySignals, theoryBoost, repetitionScore, contextualProximity } = relationScore(left, right);
       const sameCategory = sharedCategories.length > 0 && String(left.semanticGroup || left.category || "").toLowerCase() === String(right.semanticGroup || right.category || "").toLowerCase();
-      const sequentialBoost = rightIndex === leftIndex + 1 ? 0.22 : 0;
-      const proximityBoost = left.phase === right.phase ? 0.08 : 0;
+      const theoryDriven = theoryBoost > 0.75 || sharedTheorySignals.length > 0;
+      const sequentialBoost = rightIndex === leftIndex + 1 ? 0.18 : 0;
+      const proximityBoost = left.phase === right.phase ? 0.1 : 0;
       const adjustedScore = score + sequentialBoost + proximityBoost;
 
-      if (adjustedScore < 0.9) {
+      if (adjustedScore < (theoryDriven || sameCategory || sharedKeywords.length > 0 ? 0.92 : 1.16) && contextualProximity < 0.72) {
         continue;
       }
 
-      const type = sharedKeywords.length > 1
-        ? "semantic"
-        : sameCategory
+      const type = theoryDriven
+        ? "theory"
+        : sharedCategories.length > 0
           ? "category"
-          : left.clusterKey === right.clusterKey
-            ? "drift"
-            : "semantic";
+          : sharedLinks.length > 0
+            ? "wiki"
+            : sharedKeywords.length > 0 || sharedTokens.length > 0
+              ? "semantic"
+              : left.clusterKey === right.clusterKey
+                ? "drift"
+                : "semantic";
       const ttl = type === "wiki" ? 6800 : type === "drift" ? 9800 : 16000;
-      const confidence = clamp((adjustedScore / 5.2) + Math.min(0.18, theoryBoost * 0.08) + Math.min(0.12, repetitionScore * 0.06), 0.16, 0.98);
-      const explanation = explainTheoryConnection({ sharedKeywords, sharedCategories, sharedLinks, theoryBoost, repetitionScore, left, right });
+      const confidence = clamp((adjustedScore / 4.9) + Math.min(0.22, theoryBoost * 0.07) + Math.min(0.12, repetitionScore * 0.06), 0.18, 0.98);
+      const explanation = explainTheoryConnection({ sharedKeywords, sharedCategories, sharedLinks, theoryBoost, repetitionScore, left, right, leftTheorySignals: theoryResonanceTerms(left), rightTheorySignals: theoryResonanceTerms(right) });
+      const label = sharedTheorySignals[0] || sharedKeywords[0] || sharedCategories[0] || left.semanticGroup || right.semanticGroup || null;
 
       edges.push({
         id: `${left.id || leftIndex}-${right.id || rightIndex}`,
@@ -128,10 +172,12 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
         weight: adjustedScore,
         confidence,
         type,
-        label: sharedKeywords[0] || left.semanticGroup || right.semanticGroup || null,
+        label,
         keywords: sharedKeywords,
         sharedCategories,
         sharedLinks,
+        sharedTokens,
+        sharedTheorySignals,
         explanation,
         bornAt: timestamp,
         ttl,
@@ -165,6 +211,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
         type: "wiki",
         label: entry.title || term,
         keywords: [term],
+        sharedTokens: [term],
         explanation: `Linked through live Wikipedia knowledge about ${entry.title || term}`,
         bornAt: timestamp,
         ttl: 5400,
@@ -257,8 +304,8 @@ export function updateRelationLayer(relations, timestamp = now()) {
     .map((relation) => {
       const age = timestamp - relation.bornAt;
       const progress = Math.max(0, 1 - age / relation.ttl);
-      const wobble = relation.type === "wiki" ? 1 : relation.type === "drift" ? 0.84 : 0.92;
-      const typeAlpha = relation.type === "wiki" ? 0.42 : relation.type === "drift" ? 0.34 : 0.3;
+      const wobble = relation.type === "wiki" ? 1 : relation.type === "drift" ? 0.84 : relation.type === "theory" ? 0.98 : 0.92;
+      const typeAlpha = relation.type === "wiki" ? 0.42 : relation.type === "drift" ? 0.34 : relation.type === "theory" ? 0.38 : 0.3;
       return {
         ...relation,
         age,

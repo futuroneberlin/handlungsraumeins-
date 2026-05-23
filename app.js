@@ -356,6 +356,7 @@ function describeEdge(edge) {
     wiki: "linked through live Wikipedia ingestion",
     semantic: "connected through participation and semantic overlap",
     category: "connected through category clustering",
+    theory: "connected through the theory core's semantic gravity",
     drift: "connected through spatial drift and proximity",
   };
 
@@ -387,6 +388,8 @@ function getSelectedNodeDetails() {
       explanation: describeEdge(edge),
       confidence: Math.round((edge.confidence ?? edge.score ?? 1) * 100),
       weight: edge.weight ?? edge.score ?? 1,
+      evidence: mergeUniqueStrings(edge.keywords || [], edge.sharedCategories || [], edge.sharedLinks || [], edge.sharedTheorySignals || []).slice(0, 4),
+      kind: edge.type || "semantic",
     })),
   };
 }
@@ -646,19 +649,19 @@ function renderWorkspacePanels() {
     foundationPanel.innerHTML = [
       `<div class="zone-meta"><span>nodes ${state.nodes.length}</span><span>edges ${state.edges.length}</span></div>`,
       selectedDetails ? `
-        <article class="zone-card theory-details">
+        <article class="zone-card theory-details" data-node-id="${escapeHtml(String(state.selectedNode || THEORY_CORE_ID))}">
           <strong>${escapeHtml(selectedDetails.title)}</strong>
           <span>${escapeHtml(selectedDetails.type)}</span>
           <small>${escapeHtml(selectedDetails.summary || "No summary available yet.")}</small>
           ${selectedDetails.categories?.length ? `<small>Categories: ${escapeHtml(selectedDetails.categories.slice(0, 4).join(" · "))}</small>` : ""}
           ${selectedDetails.links?.length ? `<small>Internal links: ${escapeHtml(selectedDetails.links.slice(0, 4).join(" · "))}</small>` : ""}
         </article>
-        <article class="zone-card theory-details">
+        <article class="zone-card theory-details" data-node-id="${escapeHtml(String(state.selectedNode || THEORY_CORE_ID))}">
           <strong>Connection Logic</strong>
           ${selectedDetails.relations.length
             ? selectedDetails.relations.map((relation) => `
               <span>${escapeHtml(relation.label)}</span>
-              <small>${escapeHtml(relation.explanation)} · confidence ${relation.confidence}%</small>
+              <small>${escapeHtml(relation.explanation)} · confidence ${relation.confidence}%${relation.evidence?.length ? ` · evidence ${escapeHtml(relation.evidence.join(" · "))}` : ""}</small>
             `).join("")
             : `<small>No active relations yet. Click another node to expand the neighborhood.</small>`
           }
@@ -670,6 +673,7 @@ function renderWorkspacePanels() {
             <strong>${escapeHtml(String(category.label || category.id || "CATEGORY").toUpperCase())}</strong>
             <span>${escapeHtml(category.stable ? "stable cluster" : "emergent cluster")}</span>
             <small>${category.nodeCount || 0} nodes · density ${escapeHtml(String(category.density ?? 0))}</small>
+            ${category.keywords?.length ? `<small>signals: ${escapeHtml(category.keywords.slice(0, 3).join(" · "))}</small>` : ""}
           </article>
         `).join("")
         : `
