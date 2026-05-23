@@ -3,7 +3,7 @@
   --paper: #050505;
   --paper-soft: #0c0c0c;
   --ink: #efefef;
-  --muted: rgba(239, 239, 239, 0.58);
+  --muted: rgba(239, 239, 239, 0.68);
   --line: rgba(255, 255, 255, 0.09);
   --accent: #c9a227;
   --accent-soft: rgba(201, 162, 39, 0.14);
@@ -27,7 +27,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: auto;
 }
 
 canvas {
@@ -54,7 +54,7 @@ select {
   min-height: 100dvh;
   height: 100dvh;
   padding: 1rem;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
 }
 
@@ -93,10 +93,10 @@ h1 {
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: 24px;
-  background: rgba(14, 14, 14, 0.78);
-  backdrop-filter: blur(18px);
+  background: rgba(14, 14, 14, 0.84);
+  backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .zone-header {
@@ -122,7 +122,8 @@ h1 {
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .zone-card[data-node-id] {
@@ -140,6 +141,10 @@ h1 {
   display: block;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.zone-card strong {
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
 }
 
 .zone-meta {
@@ -165,7 +170,7 @@ h1 {
   z-index: 3;
   border: 1px solid rgba(201, 162, 39, 0.22);
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(201, 162, 39, 0.11), rgba(255, 255, 255, 0.03));
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.11), rgba(255, 255, 255, 0.04));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   overflow: hidden;
 }
@@ -192,7 +197,7 @@ h1 {
   display: grid;
   gap: 0.7rem;
   color: var(--muted);
-  max-height: 34dvh;
+  max-height: 42dvh;
   overflow: auto;
 }
 
@@ -306,7 +311,7 @@ h1 {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 24px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: var(--shadow);
 }
 
@@ -314,7 +319,7 @@ h1 {
   display: block;
   width: 100%;
   height: 100%;
-  pointer-events: auto;
+  pointer-events: none;
   position: relative;
   z-index: 0;
 }
@@ -332,6 +337,13 @@ h1 {
   background: rgba(14, 14, 14, 0.76);
   backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
+}
+
+.stage-shell,
+.zone,
+.zone-panel,
+.theory-core {
+  pointer-events: auto;
 }
 
 .status-panel p {

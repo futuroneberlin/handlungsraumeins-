@@ -33,6 +33,7 @@ const RELATION_INTERVAL = 4200;
 const WIKI_INTERVAL = 7500;
 
 const canvas = document.getElementById("scene");
+const stageShell = document.querySelector(".stage-shell");
 const ingestionPanel = document.getElementById("ingestion-panel");
 const foundationPanel = document.getElementById("foundation-panel");
 
@@ -955,7 +956,11 @@ async function bootstrap() {
   requestAnimationFrame(tick);
 }
 
-canvas.addEventListener("click", (event) => {
+stageShell?.addEventListener("click", (event) => {
+  if (event.target.closest(".zone, .zone-card, summary, details")) {
+    return;
+  }
+
   const node = pickNodeAt(event);
   if (!node) {
     return;
