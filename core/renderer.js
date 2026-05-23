@@ -4,7 +4,7 @@ function drawBackground(context, viewport) {
   context.fillRect(0, 0, width, height);
 
   context.save();
-  context.globalAlpha = 0.42;
+  context.globalAlpha = 0.3;
   context.strokeStyle = "rgba(255, 255, 255, 0.03)";
   context.lineWidth = 1;
 
@@ -26,7 +26,7 @@ function drawBackground(context, viewport) {
   }
 
   context.save();
-  context.globalAlpha = 0.66;
+  context.globalAlpha = 0.42;
   context.strokeStyle = "rgba(201, 162, 39, 0.08)";
   context.lineWidth = 1;
   context.beginPath();
@@ -49,8 +49,8 @@ function drawTheoryFlow(context, viewport, feedLines = []) {
 
   context.save();
   const fade = context.createLinearGradient(0, 0, columnWidth, 0);
-  fade.addColorStop(0, "rgba(17, 17, 18, 0.035)");
-  fade.addColorStop(0.5, "rgba(17, 17, 18, 0.018)");
+  fade.addColorStop(0, "rgba(17, 17, 18, 0.022)");
+  fade.addColorStop(0.5, "rgba(17, 17, 18, 0.01)");
   fade.addColorStop(1, "rgba(0, 0, 0, 0)");
   context.fillStyle = fade;
   context.fillRect(0, 0, columnWidth, height);
@@ -67,7 +67,7 @@ function drawTheoryFlow(context, viewport, feedLines = []) {
   for (const line of feedLines) {
     const fadeTop = Math.min(1, Math.max(0, 1 - line.y / (height * 0.42)));
     const fadeBottom = Math.min(1, Math.max(0, (height - line.y) / (height * 0.3)));
-    const alpha = Math.min(0.95, Math.max(0, (line.opacity || 0.9) * Math.min(fadeTop, fadeBottom) + 0.06));
+    const alpha = Math.min(0.95, Math.max(0, (line.opacity || 0.9) * Math.min(fadeTop, fadeBottom) + 0.1));
 
     if (alpha <= 0.02) {
       continue;
@@ -539,7 +539,7 @@ export function renderScene(context, viewport, graphStateOrFragments, relations,
   }
 
   context.save();
-  context.globalAlpha = 0.16;
+  context.globalAlpha = 0.11;
   context.strokeStyle = "rgba(255, 255, 255, 0.08)";
   context.lineWidth = 1;
   context.strokeRect(16, 16, width - 32, height - 32);
