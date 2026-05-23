@@ -3,23 +3,39 @@ import { renderScene } from "./core/renderer.js";
 import { createFoundationState } from "./core/layout.js";
 import { updateFragments } from "./core/movement.js";
 import { updateSpatialMemory } from "./core/spatialMemory.js";
-import { buildRelations, updateRelationLayer } from "./core/relations.js";
+import { createSemanticEdges, createEmergentCategories, updateRelationLayer } from "./core/relations.js";
+import { graphState, loadGraphState, scheduleGraphStateSave } from "./core/graphState.js";
 import { loadTheoryCorpus, flattenLines } from "./modules/theoryLoader.js";
 import { extractFoundationTerms } from "./modules/semanticExtractor.js";
 import { fetchWikipediaEntry } from "./modules/wikipedia.js";
 
 const WIKI_TOPICS = [
-  "Soziale Plastik",
+  "Social Sculpture",
   "Joseph Beuys",
-  "Raum",
-  "Architektur",
-  "Gesellschaft",
-  "Handlung",
-  "Bewegung",
-  "Verdichtung",
-  "Praxis",
-  "Kunst als Erfahrung",
-  "Kunst als menschliche Praxis",
+  "Space",
+  "Architecture",
+  "Society",
+  "Action",
+  "Movement",
+  "Density",
+  "Practice",
+  "Art as Experience",
+  "Art as Human Practice",
+];
+
+const THEORY_CORE_ID = "theory-core-actional-space";
+const THEORY_CORE_TITLE = "Actional Space of Aesthetic Practice";
+const THEORY_CORE_TEXT = "The Actional Space of Aesthetic Practice is an expanded sculptural environment in which the artwork loses its fixed object identity and dissolves into a living process.";
+const THEORY_CORE_KEYWORDS = [
+  "participation",
+  "transformation",
+  "body",
+  "temporality",
+  "social sculpture",
+  "space",
+  "action",
+  "interaction",
+  "process",
 ];
 
 const MAX_FEED_LINES = 72;
@@ -33,36 +49,28 @@ const ingestionPanel = document.getElementById("ingestion-panel");
 const foundationPanel = document.getElementById("foundation-panel");
 
 if (!canvas) {
-  throw new Error("Canvas-Element nicht gefunden.");
+  throw new Error("Canvas element not found.");
 }
 
 const stage = createCanvasStage(canvas);
 const context = stage.context;
+const state = graphState;
 
-const state = {
-  viewport: stage.getViewport(),
-  corpus: [],
-  ingestionQueue: [],
-  transformationQueue: [],
-  feedQueue: [],
-  feedLines: [],
-  baseTerms: [],
-  termKeys: new Set(),
-  fragments: [],
-  relations: [],
-  wikiEntries: [],
-  wikiSeed: [],
-  foundationState: createFoundationState(stage.getViewport()),
-  lastFrameAt: performance.now(),
-  nextFeedAt: 0,
-  nextExtractionAt: 0,
-  nextRelationAt: 0,
-  nextWikiAt: 0,
-  wikiCursor: 0,
-  feedSpeed: 16,
-  running: true,
-  nextTransformationAt: 0,
-};
+state.viewport = stage.getViewport();
+state.corpus = state.corpus || [];
+state.baseTerms = state.baseTerms || [];
+state.termKeys = state.termKeys || new Set();
+state.foundationState = state.foundationState || createFoundationState(stage.getViewport());
+state.lastFrameAt = performance.now();
+state.nextFeedAt = state.nextFeedAt || 0;
+state.nextExtractionAt = state.nextExtractionAt || 0;
+state.nextRelationAt = state.nextRelationAt || 0;
+state.nextWikiAt = state.nextWikiAt || 0;
+state.wikiCursor = state.wikiCursor || 0;
+state.feedSpeed = state.feedSpeed || 16;
+state.running = true;
+state.nextTransformationAt = state.nextTransformationAt || 0;
+state.hydrated = false;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -103,12 +111,160 @@ async function loadJson(path, fallback) {
 function buildFeedEntries(corpus) {
   return flattenLines(corpus).map((entry, index) => ({
     id: `feed-${index}-${normalizeKey(entry.text)}`,
-    source: entry.source || "theorie",
+    source: entry.source || "theory",
     text: entry.text,
     age: 0,
     opacity: 0.92,
     y: 0,
   }));
+}
+
+function createTheoryCoreNode(viewport) {
+  const width = viewport.width || 1280;
+  const height = viewport.height || 800;
+
+  return {
+    id: THEORY_CORE_ID,
+    text: THEORY_CORE_TITLE,
+    keyword: THEORY_CORE_TITLE,
+    keywords: [...THEORY_CORE_KEYWORDS],
+    category: "Theory Core",
+    semanticGroup: "Theory",
+    role: "central",
+    phase: "foundation",
+    x: width * 0.5,
+    y: height * 0.46,
+    targetX: width * 0.5,
+    targetY: height * 0.46,
+    anchorX: width * 0.5,
+    anchorY: height * 0.46,
+    clusterCenterX: width * 0.5,
+    clusterCenterY: height * 0.46,
+    depthLayer: 0,
+    lane: 1,
+    rowIndex: 0,
+    mass: 2.8,
+    weight: 2,
+    opacity: 1,
+    memoryOpacity: 1,
+    layoutWidth: Math.max(320, width * 0.32),
+    sizeScale: 1.55,
+    isTheoryCore: true,
+    locked: true,
+    fixed: true,
+    stable: true,
+    age: 0,
+  };
+}
+
+function ensureTheoryCoreNode() {
+  const existingIndex = state.nodes.findIndex((node) => node && node.id === THEORY_CORE_ID);
+  const theoryCore = createTheoryCoreNode(state.viewport);
+
+  if (existingIndex === -1) {
+    state.nodes.unshift(theoryCore);
+  } else {
+    state.nodes[existingIndex] = {
+      ...theoryCore,
+      ...state.nodes[existingIndex],
+      id: THEORY_CORE_ID,
+      text: THEORY_CORE_TITLE,
+      keyword: THEORY_CORE_TITLE,
+      keywords: [...THEORY_CORE_KEYWORDS, ...((state.nodes[existingIndex].keywords || []))],
+      category: "Theory Core",
+      semanticGroup: "Theory",
+      role: "central",
+      phase: "foundation",
+      locked: true,
+      fixed: true,
+      stable: true,
+      targetX: theoryCore.targetX,
+      targetY: theoryCore.targetY,
+      anchorX: theoryCore.anchorX,
+      anchorY: theoryCore.anchorY,
+      clusterCenterX: theoryCore.clusterCenterX,
+      clusterCenterY: theoryCore.clusterCenterY,
+      layoutWidth: theoryCore.layoutWidth,
+      sizeScale: theoryCore.sizeScale,
+    };
+  }
+
+  if (!state.selectedNode) {
+    state.selectedNode = THEORY_CORE_ID;
+  }
+}
+
+function getNodeById(nodeId) {
+  return state.nodes.find((node) => node.id === nodeId) || null;
+}
+
+function getNodeSummary(node) {
+  if (!node) {
+    return "";
+  }
+
+  if (node.id === THEORY_CORE_ID) {
+    return THEORY_CORE_TEXT;
+  }
+
+  const matchedWiki = state.wikiEntries.find((entry) => {
+    const title = normalizeKey(entry.title);
+    const keyword = normalizeKey(node.keyword || node.text || node.category || node.semanticGroup);
+    return title && keyword && (title.includes(keyword) || keyword.includes(title));
+  });
+
+  if (matchedWiki?.summary) {
+    return matchedWiki.summary;
+  }
+
+  const feedLine = [...state.feedLines].reverse().find((line) => normalizeKey(line.text || line.source).includes(normalizeKey(node.keyword || node.text)));
+  return feedLine?.text || node.description || node.text || "";
+}
+
+function describeEdge(edge) {
+  if (!edge) {
+    return "";
+  }
+
+  if (edge.explanation) {
+    return edge.explanation;
+  }
+
+  const labels = {
+    wiki: "linked through live Wikipedia ingestion",
+    semantic: "connected through participation and semantic overlap",
+    category: "connected through category clustering",
+    drift: "connected through spatial drift and proximity",
+  };
+
+  return labels[edge.type] || "related through the theory core";
+}
+
+function getSelectedNodeDetails() {
+  const selectedNode = getNodeById(state.selectedNode) || getNodeById(THEORY_CORE_ID);
+  if (!selectedNode) {
+    return null;
+  }
+
+  const relatedEdges = state.edges
+    .filter((edge) => {
+      const left = state.nodes[edge.leftIndex ?? edge.sourceIndex ?? -1];
+      const right = state.nodes[edge.rightIndex ?? edge.targetIndex ?? -1];
+      return left?.id === selectedNode.id || right?.id === selectedNode.id;
+    })
+    .slice(0, 6);
+
+  return {
+    title: selectedNode.text || selectedNode.keyword || THEORY_CORE_TITLE,
+    summary: getNodeSummary(selectedNode),
+    type: selectedNode.id === THEORY_CORE_ID ? "Theory Core" : selectedNode.semanticGroup || selectedNode.category || selectedNode.role || "Node",
+    relations: relatedEdges.map((edge) => ({
+      label: edge.label || edge.type || "relation",
+      explanation: describeEdge(edge),
+      confidence: Math.round((edge.confidence ?? edge.score ?? 1) * 100),
+      weight: edge.weight ?? edge.score ?? 1,
+    })),
+  };
 }
 
 function addFeedLine(entry) {
@@ -163,6 +319,7 @@ function createTransformationFragment(term, index) {
 
   return {
     ...term,
+    id: term.id || `node-${normalizeKey(term.keyword || term.text || index)}-${index}`,
     phase: "transformation",
     category: term.semanticGroup || term.role || "raw",
     links: [],
@@ -186,27 +343,28 @@ function createTransformationFragment(term, index) {
   };
 }
 
-function rebuildSeedRelations() {
-  const fragmentIndex = new Map();
-  state.fragments.forEach((fragment, index) => {
-    fragmentIndex.set(normalizeKey(fragment.keyword || fragment.text), index);
-    fragmentIndex.set(normalizeKey(fragment.text), index);
-  });
-
+function refreshGraphTopology() {
   const now = performance.now();
-  const seedRelations = [];
+  state.edges = createSemanticEdges(state.nodes, state.wikiEntries, now);
 
-  for (const seed of state.wikiSeed) {
-    const leftIndex = fragmentIndex.get(normalizeKey(seed.source));
-    const rightIndex = fragmentIndex.get(normalizeKey(seed.target));
-    if (leftIndex === undefined || rightIndex === undefined || leftIndex === rightIndex) {
+  for (const seed of state.wikiSeed || []) {
+    const leftIndex = state.nodes.findIndex((node) => normalizeKey(node.keyword || node.text) === normalizeKey(seed.source));
+    const rightIndex = state.nodes.findIndex((node) => normalizeKey(node.keyword || node.text) === normalizeKey(seed.target));
+    if (leftIndex === -1 || rightIndex === -1 || leftIndex === rightIndex) {
       continue;
     }
 
-    seedRelations.push({
+    state.edges.unshift({
+      id: `seed-${leftIndex}-${rightIndex}`,
+      source: state.nodes[leftIndex].id,
+      target: state.nodes[rightIndex].id,
+      sourceIndex: leftIndex,
+      targetIndex: rightIndex,
       leftIndex,
       rightIndex,
       score: 1 + (seed.weight || 0),
+      weight: 1 + (seed.weight || 0),
+      confidence: 0.94,
       type: "semantic",
       label: seed.label || `${seed.source} / ${seed.target}`,
       bornAt: now,
@@ -215,7 +373,69 @@ function rebuildSeedRelations() {
     });
   }
 
-  state.relations = [...seedRelations, ...buildRelations(state.fragments, state.wikiEntries, now)];
+  state.categories = createEmergentCategories(state.nodes, state.edges, now);
+}
+
+function collectExpansionTopics(node) {
+  const terms = new Set();
+  for (const keyword of node.keywords || []) {
+    const normalized = String(keyword || "").trim();
+    if (normalized) {
+      terms.add(normalized);
+    }
+  }
+
+  if (node.semanticGroup) {
+    terms.add(node.semanticGroup);
+  }
+  if (node.category) {
+    terms.add(node.category);
+  }
+  if (node.source) {
+    terms.add(node.source);
+  }
+
+  return [...terms].slice(0, 4);
+}
+
+async function expandNode(node) {
+  const topics = collectExpansionTopics(node);
+  state.history = [
+    {
+      type: "expand",
+      nodeId: node.id,
+      label: node.text || node.keyword || node.category || node.semanticGroup || "node",
+      at: Date.now(),
+      topics,
+    },
+    ...state.history,
+  ].slice(0, 40);
+  state.selectedNode = node.id;
+
+  for (const topic of topics.slice(0, 3)) {
+    void loadWikipediaPulse(topic);
+  }
+
+  scheduleGraphStateSave(state);
+}
+
+function pickNodeAt(event) {
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  let bestNode = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const node of state.nodes) {
+    const radius = Math.max(16, (node.layoutWidth || 220) * 0.22);
+    const distance = Math.hypot(x - node.x, y - node.y);
+    if (distance <= radius && distance < bestDistance) {
+      bestNode = node;
+      bestDistance = distance;
+    }
+  }
+
+  return bestNode;
 }
 
 function fitText(ctx, text, maxWidth) {
@@ -250,6 +470,7 @@ function renderWorkspacePanels() {
 
     ingestionPanel.innerHTML = [
       `<div class="zone-meta"><span>queue ${state.ingestionQueue.length}</span><span>transform ${state.transformationQueue.length}</span></div>`,
+      state.selectedNode ? `<div class="zone-meta"><span>selected</span><span>${escapeHtml(String(state.selectedNode))}</span></div>` : "",
       ...activeItems.map((item) => `
         <article class="zone-card">
           <strong>${escapeHtml(item.title)}</strong>
@@ -261,34 +482,40 @@ function renderWorkspacePanels() {
   }
 
   if (foundationPanel) {
-    const categoryCounts = new Map();
-    for (const fragment of state.fragments) {
-      if (fragment.phase !== "foundation") {
-        continue;
-      }
-
-      const key = (fragment.semanticGroup || fragment.category || fragment.keyword || fragment.text || "Kategorie").toString();
-      categoryCounts.set(key, (categoryCounts.get(key) || 0) + 1);
-    }
-
-    const categories = [...categoryCounts.entries()]
-      .sort((left, right) => right[1] - left[1])
-      .slice(0, 8);
+    const categories = Array.isArray(state.categories) ? state.categories.slice(0, 8) : [];
+    const selectedDetails = getSelectedNodeDetails();
 
     foundationPanel.innerHTML = [
-      `<div class="zone-meta"><span>foundation ${state.fragments.filter((fragment) => fragment.phase === "foundation").length}</span><span>relations ${state.relations.length}</span></div>`,
+      `<div class="zone-meta"><span>nodes ${state.nodes.length}</span><span>edges ${state.edges.length}</span></div>`,
+      selectedDetails ? `
+        <article class="zone-card theory-details">
+          <strong>${escapeHtml(selectedDetails.title)}</strong>
+          <span>${escapeHtml(selectedDetails.type)}</span>
+          <small>${escapeHtml(selectedDetails.summary || "No summary available yet.")}</small>
+        </article>
+        <article class="zone-card theory-details">
+          <strong>Connection Logic</strong>
+          ${selectedDetails.relations.length
+            ? selectedDetails.relations.map((relation) => `
+              <span>${escapeHtml(relation.label)}</span>
+              <small>${escapeHtml(relation.explanation)} · confidence ${relation.confidence}%</small>
+            `).join("")
+            : `<small>No active relations yet. Click another node to expand the neighborhood.</small>`
+          }
+        </article>
+      ` : "",
       categories.length
-        ? categories.map(([name, count]) => `
+        ? categories.map((category) => `
           <article class="zone-card">
-            <strong>${escapeHtml(name.toUpperCase())}</strong>
-            <span>stable cluster</span>
-            <small>${count} nodes</small>
+            <strong>${escapeHtml(String(category.label || category.id || "CATEGORY").toUpperCase())}</strong>
+            <span>${escapeHtml(category.stable ? "stable cluster" : "emergent cluster")}</span>
+            <small>${category.nodeCount || 0} nodes · density ${escapeHtml(String(category.density ?? 0))}</small>
           </article>
         `).join("")
         : `
           <article class="zone-card">
-            <strong>Wartet auf Emergenz</strong>
-            <span>Kategorien entstehen erst nach ausreichender Dichte.</span>
+            <strong>Waiting for emergence</strong>
+            <span>Categories form only after sufficient density.</span>
             <small>center simulation active</small>
           </article>
         `,
@@ -297,6 +524,7 @@ function renderWorkspacePanels() {
 }
 
 async function loadInitialData() {
+  const restored = loadGraphState(state);
   const [theoryCorpus, parsedTexts, wikiSeed] = await Promise.all([
     loadTheoryCorpus(),
     loadJson("./data/parsedTexts.json", []),
@@ -310,23 +538,31 @@ async function loadInitialData() {
 
   state.corpus = mergedCorpus;
   state.feedQueue = buildFeedEntries(mergedCorpus);
-  state.ingestionQueue = [...state.feedQueue];
+  ensureTheoryCoreNode();
+  if (!restored || !state.nodes.length) {
+    state.ingestionQueue = [...state.feedQueue];
+    state.edges = [];
+    state.categories = [];
+  }
+  state.selectedNode = state.selectedNode || THEORY_CORE_ID;
   state.wikiSeed = Array.isArray(wikiSeed) ? wikiSeed : [];
+
+  if (state.nodes.length && (!restored || !state.edges.length || !state.categories.length)) {
+    refreshGraphTopology();
+  }
 
   state.nextTransformationAt = performance.now() + 600;
   renderWorkspacePanels();
 }
 
-async function loadWikipediaPulse() {
-  if (state.wikiCursor >= WIKI_TOPICS.length) {
-    state.wikiCursor = 0;
+async function loadWikipediaPulse(topic = null) {
+  const nextTopic = topic || WIKI_TOPICS[state.wikiCursor % WIKI_TOPICS.length];
+  if (!topic) {
+    state.wikiCursor = (state.wikiCursor + 1) % WIKI_TOPICS.length;
   }
 
-  const term = WIKI_TOPICS[state.wikiCursor];
-  state.wikiCursor += 1;
-
   try {
-    const entry = await fetchWikipediaEntry(term);
+    const entry = await fetchWikipediaEntry(nextTopic);
     if (!entry) {
       return;
     }
@@ -343,6 +579,7 @@ async function loadWikipediaPulse() {
       age: 0,
       opacity: 0.94,
     });
+    scheduleGraphStateSave(state);
   } catch {
     return;
   }
@@ -353,7 +590,27 @@ function resize() {
   state.viewport = stage.getViewport();
 
   state.foundationState = createFoundationState(state.viewport);
-  state.fragments = state.fragments.map((fragment) => {
+  state.nodes = state.nodes.map((fragment) => {
+    if (fragment.id === THEORY_CORE_ID) {
+      const theoryCore = createTheoryCoreNode(state.viewport);
+      return {
+        ...theoryCore,
+        ...fragment,
+        id: THEORY_CORE_ID,
+        text: THEORY_CORE_TITLE,
+        keyword: THEORY_CORE_TITLE,
+        keywords: [...THEORY_CORE_KEYWORDS, ...((fragment.keywords || []))],
+        targetX: theoryCore.targetX,
+        targetY: theoryCore.targetY,
+        anchorX: theoryCore.anchorX,
+        anchorY: theoryCore.anchorY,
+        clusterCenterX: theoryCore.clusterCenterX,
+        clusterCenterY: theoryCore.clusterCenterY,
+        layoutWidth: theoryCore.layoutWidth,
+        sizeScale: theoryCore.sizeScale,
+      };
+    }
+
     const lane = Number.isInteger(fragment.lane) ? fragment.lane : 1;
     const rowIndex = Number.isInteger(fragment.rowIndex) ? fragment.rowIndex : 0;
     const targetX = lane === 0
@@ -376,13 +633,11 @@ function resize() {
   });
 
   state.foundationState.laneCounts = [0, 0, 0];
-  for (const fragment of state.fragments) {
+  for (const fragment of state.nodes) {
     if (Number.isInteger(fragment.lane) && fragment.lane >= 0 && fragment.lane <= 2) {
       state.foundationState.laneCounts[fragment.lane] += 1;
     }
   }
-
-  rebuildSeedRelations();
 }
 
 function tick(now) {
@@ -424,31 +679,49 @@ function tick(now) {
     if (now >= state.nextTransformationAt && state.transformationQueue.length) {
       const nextTerm = state.transformationQueue.shift();
       if (nextTerm) {
-        state.fragments.push(createTransformationFragment(nextTerm, state.fragments.length));
+        state.nodes.push(createTransformationFragment(nextTerm, state.nodes.length));
       }
       state.nextTransformationAt = now + 480;
     }
 
     const semanticCounts = new Map();
-    for (const fragment of state.fragments) {
+    for (const fragment of state.nodes) {
       const key = fragment.semanticGroup || fragment.category || fragment.role || "general";
       semanticCounts.set(key, (semanticCounts.get(key) || 0) + 1);
     }
 
-    for (const fragment of state.fragments) {
+    for (const fragment of state.nodes) {
+      if (fragment.id === THEORY_CORE_ID) {
+        fragment.text = THEORY_CORE_TITLE;
+        fragment.keyword = THEORY_CORE_TITLE;
+        fragment.targetX = state.viewport.width * 0.5;
+        fragment.targetY = state.viewport.height * 0.46;
+        fragment.anchorX = fragment.targetX;
+        fragment.anchorY = fragment.targetY;
+        fragment.clusterCenterX = fragment.targetX;
+        fragment.clusterCenterY = fragment.targetY;
+        fragment.depthLayer = 0;
+        fragment.mass = 3;
+        fragment.opacity = 1;
+        fragment.memoryOpacity = 1;
+        fragment.vx = 0;
+        fragment.vy = 0;
+        continue;
+      }
+
       fragment.age = (fragment.age || 0) + delta / 1000;
       const groupKey = fragment.semanticGroup || fragment.category || fragment.role || "general";
       const groupCount = semanticCounts.get(groupKey) || 0;
-      const relationDensity = state.relations.filter((relation) => {
-        const left = state.fragments[relation.leftIndex];
-        const right = state.fragments[relation.rightIndex];
+      const relationDensity = state.edges.filter((relation) => {
+        const left = state.nodes[relation.leftIndex ?? relation.sourceIndex ?? -1];
+        const right = state.nodes[relation.rightIndex ?? relation.targetIndex ?? -1];
         return left && right && (left.semanticGroup === groupKey || right.semanticGroup === groupKey);
       }).length;
 
       if (fragment.phase !== "foundation" && groupCount >= 3 && relationDensity >= 2 && fragment.age > 6) {
         fragment.phase = "foundation";
         fragment.depthLayer = 2;
-        fragment.text = String(fragment.semanticGroup || fragment.category || fragment.text || fragment.keyword || "KATEGORIE").toUpperCase();
+        fragment.text = String(fragment.semanticGroup || fragment.category || fragment.text || fragment.keyword || "CATEGORY").toUpperCase();
         fragment.keywords = [fragment.semanticGroup || fragment.category || fragment.keyword || fragment.text];
         fragment.targetX = state.viewport.width * 0.82;
         fragment.anchorX = fragment.targetX;
@@ -460,7 +733,7 @@ function tick(now) {
     }
 
     if (now >= state.nextRelationAt) {
-      rebuildSeedRelations();
+      refreshGraphTopology();
       state.nextRelationAt = now + RELATION_INTERVAL;
     }
 
@@ -469,14 +742,14 @@ function tick(now) {
       state.nextWikiAt = now + WIKI_INTERVAL;
     }
 
-    updateFragments(state.fragments, state.relations, state.viewport, now, delta);
-    updateSpatialMemory(state.fragments, delta);
-    state.relations = updateRelationLayer(state.relations, now);
+    updateFragments(state.nodes, state.edges, state.viewport, now, delta);
+    updateSpatialMemory(state.nodes, delta);
+    state.edges = updateRelationLayer(state.edges, now);
 
     renderWorkspacePanels();
 
     try {
-      renderScene(context, state.viewport, state.fragments, state.relations);
+      renderScene(context, state.viewport, state);
     } catch (error) {
       console.error("Render crash prevented:", error);
       const viewport = state.viewport || { width: canvas.width, height: canvas.height };
@@ -488,6 +761,8 @@ function tick(now) {
       context.fillRect(0, 0, width, height);
       context.restore();
     }
+
+    scheduleGraphStateSave(state);
   } catch (error) {
     console.error("Tick crash prevented:", error);
     const viewport = state.viewport || { width: canvas.width, height: canvas.height };
@@ -513,8 +788,18 @@ async function bootstrap() {
   requestAnimationFrame(tick);
 }
 
+canvas.addEventListener("click", (event) => {
+  const node = pickNodeAt(event);
+  if (!node) {
+    return;
+  }
+
+  void expandNode(node);
+  renderWorkspacePanels();
+});
+
 window.addEventListener("resize", resize, { passive: true });
 
 bootstrap().catch((error) => {
-  console.error("Handlungsraum konnte nicht gestartet werden.", error);
+  console.error("The application could not be started.", error);
 });

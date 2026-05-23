@@ -108,6 +108,11 @@ h1 {
   min-height: 0;
 }
 
+.zone-panel .zone-card,
+.theory-core {
+  animation: rise-in 420ms ease both;
+}
+
 .zone-card {
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--line);
@@ -144,6 +149,86 @@ h1 {
 
 .fundament {
   border-color: rgba(201, 162, 39, 0.16);
+}
+
+.theory-core {
+  border: 1px solid rgba(201, 162, 39, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.11), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.theory-core summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 1rem 1rem 0.9rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.theory-core summary::-webkit-details-marker {
+  display: none;
+}
+
+.theory-core summary strong {
+  font-size: 1rem;
+  letter-spacing: -0.03em;
+}
+
+.theory-core-body {
+  padding: 0 1rem 1rem;
+  display: grid;
+  gap: 0.7rem;
+  color: var(--muted);
+}
+
+.theory-core-body p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.theory-core-body ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.theory-principle-label {
+  margin-top: 0.25rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.74rem;
+  color: rgba(201, 162, 39, 0.85);
+}
+
+.theory-details {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.theory-details strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.theory-details span,
+.theory-details small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+@keyframes rise-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .controls {
@@ -216,7 +301,7 @@ h1 {
   display: block;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .status-panel {

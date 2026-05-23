@@ -111,7 +111,7 @@ function drawDebugOverlay(context, viewport, meta = {}) {
   context.font = '700 26px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
   context.textAlign = "left";
   context.textBaseline = "top";
-  context.fillText("THEORIEFLUSS AKTIV", 24, 20);
+  context.fillText("THEORY FLOW ACTIVE", 24, 20);
 
   context.font = '500 14px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
   context.fillStyle = "rgba(255, 255, 255, 0.82)";
@@ -132,7 +132,7 @@ function drawDebugOverlay(context, viewport, meta = {}) {
   context.font = '600 24px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(meta.centerLabel || "FUNDAMENT", centerX, centerY - 2);
+  context.fillText(meta.centerLabel || "CENTER", centerX, centerY - 2);
 
   context.font = '500 12px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
   context.fillStyle = "rgba(255, 255, 255, 0.75)";
@@ -200,6 +200,14 @@ function createNoiseLayer(width, height) {
 
 function sortFragmentsForDepth(fragments) {
   return [...fragments].sort((left, right) => {
+    if (left.isTheoryCore && !right.isTheoryCore) {
+      return 1;
+    }
+
+    if (!left.isTheoryCore && right.isTheoryCore) {
+      return -1;
+    }
+
     const depthLeft = left.depthLayer || 1;
     const depthRight = right.depthLayer || 1;
     if (depthLeft !== depthRight) {
@@ -237,6 +245,25 @@ function splitByDepth(fragments) {
   }
 
   return { background, middle, foreground };
+}
+
+function buildNeighborSet(nodes, edges, selectedNodeId) {
+  const neighbors = new Set();
+  if (!selectedNodeId) {
+    return neighbors;
+  }
+
+  for (const edge of edges) {
+    const sourceId = edge.source ?? nodes[edge.leftIndex ?? edge.sourceIndex ?? -1]?.id;
+    const targetId = edge.target ?? nodes[edge.rightIndex ?? edge.targetIndex ?? -1]?.id;
+    if (sourceId === selectedNodeId) {
+      neighbors.add(targetId);
+    } else if (targetId === selectedNodeId) {
+      neighbors.add(sourceId);
+    }
+  }
+
+  return neighbors;
 }
 
 function wrapText(context, text, maxWidth) {
@@ -286,9 +313,13 @@ function drawRoundedRectPath(context, x, y, width, height, radius) {
   context.closePath();
 }
 
-function drawRelation(context, left, right, relation) {
+function drawRelation(context, left, right, relation, interactionState = {}) {
+  const selectedNodeId = interactionState.selectedNodeId || null;
+  const neighborIds = interactionState.neighborIds || new Set();
+  const isSelectedLink = selectedNodeId && (left.id === selectedNodeId || right.id === selectedNodeId);
+  const isNeighborLink = selectedNodeId && (neighborIds.has(left.id) || neighborIds.has(right.id));
   const baseAlpha = relation.opacity || (relation.type === "wiki" ? 0.38 : relation.type === "semantic" ? 0.3 : 0.26);
-  const alpha = Math.min(0.65, Math.max(0.25, baseAlpha));
+  const alpha = isSelectedLink ? 0.82 : isNeighborLink ? 0.48 : Math.min(0.65, Math.max(0.25, baseAlpha));
   context.save();
   context.globalAlpha = alpha;
   context.strokeStyle = relation.type === "wiki" ? "rgba(201, 162, 39, 0.92)" : "rgba(255, 255, 255, 0.78)";
@@ -311,8 +342,10 @@ function drawRelation(context, left, right, relation) {
   }
 }
 
-function drawFragment(context, fragment, fontSize, accentStrength) {
+function drawFragment(context, fragment, fontSize, accentStrength, interactionState = {}) {
+  const theoryBoost = fragment.isTheoryCore ? 1.55 : 1;
   const layoutWidth = fragment.layoutWidth || Math.max(200, Math.min(320, 180 + (fragment.weight || 0.5) * 120));
+  const keywords = Array.isArray(fragment.keywords) ? fragment.keywords : [];
   const paddingX = Math.max(12, fontSize * 0.38);
   const paddingY = Math.max(9, fontSize * 0.28);
   const isPdfPhase = fragment.phase === "pdf";
@@ -325,7 +358,7 @@ function drawFragment(context, fragment, fontSize, accentStrength) {
   const rotationAmp = role === "central" ? 0.0025 : 0.006;
   context.rotate(Math.sin(fragment.signature * 0.001) * rotationAmp);
 
-  context.font = `${accentStrength > 0.55 ? 700 : 500} ${fontSize}px "Space Grotesk", "Helvetica Neue", "Arial Narrow", sans-serif`;
+  context.font = `${fragment.isTheoryCore || accentStrength > 0.55 ? 700 : 500} ${Math.round(fontSize * theoryBoost)}px "Space Grotesk", "Helvetica Neue", "Arial Narrow", sans-serif`;
   context.textBaseline = "middle";
   context.textAlign = "left";
 
@@ -343,9 +376,14 @@ function drawFragment(context, fragment, fontSize, accentStrength) {
   const opacity = fragment.opacity ?? 1;
   const memoryOpacity = fragment.memoryOpacity ?? 0.72;
   const depthLayer = fragment.depthLayer || 1;
-  const depthScale = depthLayer === 0 ? 0.92 : depthLayer === 1 ? 1 : 1.04;
+  const depthScale = (depthLayer === 0 ? 0.92 : depthLayer === 1 ? 1 : 1.04) * theoryBoost;
   const shadowOpacity = depthLayer === 2 ? 0.02 : depthLayer === 1 ? 0.04 : 0.06;
-  const strokeAlpha = role === "central" ? 0.22 : accentStrength > 0.55 ? 0.16 : 0.06;
+  const strokeAlpha = fragment.isTheoryCore ? 0.44 : role === "central" ? 0.22 : accentStrength > 0.55 ? 0.16 : 0.06;
+  const selectedNodeId = interactionState.selectedNodeId || null;
+  const neighborIds = interactionState.neighborIds || new Set();
+  const isSelected = selectedNodeId && fragment.id === selectedNodeId;
+  const isNeighbor = selectedNodeId && neighborIds.has(fragment.id);
+  const interactionBoost = isSelected ? 1.18 : isNeighbor ? 1.08 : 1;
 
   if (isPdfPhase) {
     context.save();
@@ -377,12 +415,20 @@ function drawFragment(context, fragment, fontSize, accentStrength) {
     context.restore();
   }
 
-  context.scale(depthScale, depthScale);
+  context.scale(depthScale * interactionBoost, depthScale * interactionBoost);
   context.fillStyle = `rgba(26, 24, 22, ${0.70 * opacity})`;
-  context.strokeStyle = accentStrength > 0.55 ? "rgba(201, 162, 39, 0.12)" : `rgba(255, 255, 255, ${strokeAlpha})`;
-  context.lineWidth = 1;
+  context.strokeStyle = fragment.isTheoryCore
+    ? "rgba(201, 162, 39, 0.95)"
+    : isSelected
+    ? "rgba(201, 162, 39, 0.82)"
+    : isNeighbor
+      ? "rgba(255, 255, 255, 0.28)"
+      : accentStrength > 0.55
+        ? "rgba(201, 162, 39, 0.12)"
+        : `rgba(255, 255, 255, ${strokeAlpha})`;
+  context.lineWidth = fragment.isTheoryCore ? 2.2 : isSelected ? 1.8 : 1;
   context.shadowColor = `rgba(0, 0, 0, ${shadowOpacity + 0.08})`;
-  context.shadowBlur = depthLayer === 0 ? 0 : 3;
+  context.shadowBlur = fragment.isTheoryCore ? 14 : isSelected ? 10 : depthLayer === 0 ? 0 : 3;
   drawRoundedRectPath(context, boxLeft, -boxHeight / 2, boxWidth, boxHeight, 999);
   context.fill();
   context.stroke();
@@ -414,7 +460,7 @@ function drawFragment(context, fragment, fontSize, accentStrength) {
     context.restore();
   }
 
-  if (fragment.keywords[0] && accentStrength > 0.55) {
+  if (keywords[0] && (accentStrength > 0.55 || isSelected || fragment.isTheoryCore)) {
     context.fillStyle = "rgba(201, 162, 39, 0.42)";
     context.beginPath();
     context.arc(boxWidth / 2 - 8, -boxHeight / 2 + 8, 2.2, 0, Math.PI * 2);
@@ -424,12 +470,20 @@ function drawFragment(context, fragment, fontSize, accentStrength) {
   context.restore();
 }
 
-export function renderScene(context, viewport, fragments, relations, feedLines = []) {
+export function renderScene(context, viewport, graphStateOrFragments, relations, feedLines = []) {
+  const graphState = Array.isArray(graphStateOrFragments)
+    ? {
+      nodes: graphStateOrFragments,
+      edges: Array.isArray(relations) ? relations : [],
+      selectedNode: null,
+      debug: false,
+    }
+    : (graphStateOrFragments || {});
   const safeViewport = viewport && Number.isFinite(viewport.width) && Number.isFinite(viewport.height)
     ? viewport
     : { width: 0, height: 0 };
-  const safeFragments = Array.isArray(fragments) ? fragments : [];
-  const safeRelations = Array.isArray(relations) ? relations : [];
+  const safeFragments = Array.isArray(graphState.nodes) ? graphState.nodes : [];
+  const safeRelations = Array.isArray(graphState.edges) ? graphState.edges : [];
   const safeFeedLines = Array.isArray(feedLines) ? feedLines : [];
   const { width, height } = safeViewport;
 
@@ -451,33 +505,36 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
   const fragmentByIndex = safeFragments;
   const depthSortedFragments = sortFragmentsForDepth(safeFragments);
   const { background, middle, foreground } = splitByDepth(depthSortedFragments);
+  const selectedNodeId = graphState.selectedNode || null;
+  const neighborIds = buildNeighborSet(safeFragments, safeRelations, selectedNodeId);
+  const interactionState = { selectedNodeId, neighborIds };
 
   for (const fragment of background) {
     const base = Math.max(11, Math.min(21, 9.8 + fragment.weight * 7.6 + (fragment.clusterMass || 0) * 0.04));
     const fontSize = Math.round(base * (fragment.sizeScale || 1));
-    drawFragment(context, fragment, fontSize, fragment.keywords.length / 4);
+    drawFragment(context, fragment, fontSize, (Array.isArray(fragment.keywords) ? fragment.keywords.length : 0) / 4, interactionState);
   }
 
   for (const fragment of middle) {
     const base = Math.max(12, Math.min(23, 10.2 + fragment.weight * 8.8 + (fragment.clusterMass || 0) * 0.06));
     let fontSize = Math.round(base * (fragment.sizeScale || 1));
     if (fragment.phase === "pdf") fontSize = Math.round(fontSize * 0.86);
-    const accentStrength = fragment.keywords.length / 4;
-    drawFragment(context, fragment, fontSize, accentStrength);
+    const accentStrength = (Array.isArray(fragment.keywords) ? fragment.keywords.length : 0) / 4;
+    drawFragment(context, fragment, fontSize, accentStrength, interactionState);
   }
 
   for (const fragment of foreground) {
     const base = Math.max(12, Math.min(24, 10.6 + fragment.weight * 9.2 + (fragment.clusterMass || 0) * 0.07));
     const fontSize = Math.round(base * (fragment.sizeScale || 1));
-    const accentStrength = fragment.keywords.length / 4;
-    drawFragment(context, fragment, fontSize, accentStrength);
+    const accentStrength = (Array.isArray(fragment.keywords) ? fragment.keywords.length : 0) / 4;
+    drawFragment(context, fragment, fontSize, accentStrength, interactionState);
   }
 
   for (const relation of safeRelations) {
     const left = fragmentByIndex[relation.leftIndex];
     const right = fragmentByIndex[relation.rightIndex];
     if (left && right && relation.progress > 0.05) {
-      drawRelation(context, left, right, relation);
+      drawRelation(context, left, right, relation, interactionState);
     }
   }
 
@@ -491,7 +548,12 @@ export function renderScene(context, viewport, fragments, relations, feedLines =
   context.fillStyle = "rgba(245, 245, 245, 0.7)";
   context.font = '500 12px "Space Grotesk", "Helvetica Neue", "Arial Narrow", sans-serif';
   context.textAlign = "left";
-  context.fillText("THEORIEFLUSS / ARCHITEKTONISCHE SETZUNG", 28, 34);
+  context.fillText("THEORY FLOW / ARCHITECTURAL SETTING", 28, 34);
+
+  if (graphState.debug) {
+    context.fillStyle = "rgba(255, 255, 255, 0.72)";
+    context.fillText(`selected ${selectedNodeId || "none"} | categories ${Array.isArray(graphState.categories) ? graphState.categories.length : 0}`, 28, 52);
+  }
   context.restore();
 }
 
@@ -515,7 +577,7 @@ export function renderDiagnosticsOverlay(context, viewport, meta = {}) {
   context.font = '700 20px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
   context.textAlign = "left";
   context.textBaseline = "top";
-  context.fillText("THEORIEFLUSS AKTIV", 26, 22);
+  context.fillText("THEORY FLOW ACTIVE", 26, 22);
 
   context.font = '500 13px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
   context.fillStyle = "rgba(255, 255, 255, 0.9)";
@@ -534,6 +596,6 @@ export function renderDiagnosticsOverlay(context, viewport, meta = {}) {
 
   context.fillStyle = "rgba(255, 255, 255, 0.92)";
   context.font = '600 14px "Space Grotesk", "Helvetica Neue", Arial, sans-serif';
-  context.fillText(`center: ${meta.centerLabel || "FUNDAMENT"}`, 26, Math.min(height - 28, y + 10));
+  context.fillText(`center: ${meta.centerLabel || "CENTER"}`, 26, Math.min(height - 28, y + 10));
   context.restore();
 }

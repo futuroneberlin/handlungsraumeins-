@@ -67,6 +67,20 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
   buildRelationLookup(safeFragments, safeRelations);
 
   for (const fragment of safeFragments) {
+    if (fragment.isTheoryCore) {
+      const targetX = width * 0.5;
+      const targetY = height * 0.46;
+      fragment.x += (targetX - fragment.x) * 0.24;
+      fragment.y += (targetY - fragment.y) * 0.24;
+      fragment.vx = 0;
+      fragment.vy = 0;
+      fragment.z = 0;
+      fragment.opacity = 1;
+      fragment.memoryOpacity = 1;
+      fragment.layoutWidth = Math.max(fragment.layoutWidth || 0, Math.min(width * 0.34, 420));
+      continue;
+    }
+
     const mass = clamp(fragment.mass || fragment.clusterMass || fragment.weight || 1, 0.8, 3.2);
     const ageFactor = Math.min(1, (fragment.age || 0) / 16);
     const depthLayer = fragment.depthLayer || 1;
