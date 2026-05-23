@@ -11,6 +11,11 @@ import { extractFoundationTerms } from "./modules/semanticExtractor.js";
 import { fetchWikipediaEntry } from "./modules/wikipedia.js";
 
 const WIKI_TOPICS = [
+  "Art",
+  "Kunst",
+  "kunsttheorie",
+  "bildhauerei",
+  "sculpture",
   "Social Sculpture",
   "Joseph Beuys",
   "Space",
