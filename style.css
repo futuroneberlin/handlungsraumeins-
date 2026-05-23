@@ -120,6 +120,10 @@ h1 {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.zone-card[data-node-id] {
+  cursor: pointer;
+}
+
 .zone-card strong {
   display: block;
   margin-bottom: 0.22rem;

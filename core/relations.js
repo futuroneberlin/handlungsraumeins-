@@ -1,66 +1,35 @@
+import { explainTheoryConnection, theoryAffinity } from "./theoryModel.js";
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-const THEORY_CORE_TERMS = [
-  "participation",
-  "transformation",
-  "body",
-  "temporality",
-  "social sculpture",
-  "space",
-  "action",
-  "interaction",
-  "process",
-  "practice",
-  "movement",
-];
+function normalizeTokenList(values = []) {
+  return [...new Set(values
+    .flat()
+    .map((value) => String(value || "").toLowerCase().trim())
+    .map((value) => value.replace(/^category:/i, ""))
+    .filter(Boolean))];
+}
 
-const THEORY_CORE_GROUPS = new Set([
-  "Raum",
-  "Handlung",
-  "Gesellschaft",
-  "Kunst",
-  "Konstruktion",
-]);
-
-function theoryAffinity(node) {
-  const tokens = [
-    ...(Array.isArray(node.keywords) ? node.keywords : []),
-    node.text,
-    node.keyword,
-    node.semanticGroup,
-    node.category,
-    node.role,
-  ]
-    .filter(Boolean)
-    .map((value) => String(value).toLowerCase());
-
-  let score = 0;
-  for (const token of tokens) {
-    for (const term of THEORY_CORE_TERMS) {
-      if (token.includes(term) || term.includes(token)) {
-        score += 1;
-      }
-    }
-  }
-
-  if (THEORY_CORE_GROUPS.has(node.semanticGroup) || THEORY_CORE_GROUPS.has(node.category)) {
-    score += 1.2;
-  }
-
-  return score;
+function overlap(leftValues = [], rightValues = []) {
+  const rightSet = new Set(normalizeTokenList(rightValues));
+  return normalizeTokenList(leftValues).filter((value) => rightSet.has(value));
 }
 
 function relationScore(left, right) {
-  const leftKeywords = left.keywords || [];
-  const rightKeywords = right.keywords || [];
-  const sharedKeywords = leftKeywords.filter((keyword) => rightKeywords.includes(keyword));
+  const leftKeywords = normalizeTokenList([left.keywords || [], left.keyword, left.text, left.title]);
+  const rightKeywords = normalizeTokenList([right.keywords || [], right.keyword, right.text, right.title]);
+  const sharedKeywords = overlap(leftKeywords, rightKeywords);
+  const sharedCategories = overlap(left.wikiCategories || left.categories || [], right.wikiCategories || right.categories || []);
+  const sharedLinks = overlap(left.wikiLinks || [], right.wikiLinks || []);
   const leftIndex = Number.isFinite(left.index) ? left.index : Number.isFinite(left.sequenceIndex) ? left.sequenceIndex : 0;
   const rightIndex = Number.isFinite(right.index) ? right.index : Number.isFinite(right.sequenceIndex) ? right.sequenceIndex : 0;
   const proximityScore = Math.max(0, 1 - Math.abs(leftIndex - rightIndex) / 24);
   const sourceScore = left.source === right.source ? 0.25 : 0;
-  const sharedScore = sharedKeywords.length * 1.1;
+  const sharedScore = sharedKeywords.length * 0.86;
+  const categoryScore = sharedCategories.length * 1.25;
+  const linkScore = sharedLinks.length * 1.1;
   const massScore = Math.min(left.weight || 0.5, right.weight || 0.5) * 0.45;
   const groupLeft = left.semanticGroup || null;
   const groupRight = right.semanticGroup || null;
@@ -78,11 +47,15 @@ function relationScore(left, right) {
   const bridgeScore = bridgePairs.has(`${groupLeft}|${groupRight}`) ? 0.34 : 0;
   const theoryLeft = theoryAffinity(left);
   const theoryRight = theoryAffinity(right);
-  const theoryBoost = Math.min(1.6, (theoryLeft + theoryRight) * 0.22);
+  const theoryBoost = Math.min(1.8, (theoryLeft + theoryRight) * 0.22);
+  const repetitionScore = Math.min(1.2, Math.min(left.appearanceCount || 1, right.appearanceCount || 1) * 0.12);
   return {
-    score: sharedScore + proximityScore + sourceScore + massScore + groupScore + bridgeScore + theoryBoost,
+    score: sharedScore + categoryScore + linkScore + proximityScore + sourceScore + massScore + groupScore + bridgeScore + theoryBoost + repetitionScore,
     sharedKeywords,
+    sharedCategories,
+    sharedLinks,
     theoryBoost,
+    repetitionScore,
   };
 }
 
@@ -122,15 +95,11 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
     for (let rightIndex = leftIndex + 1; rightIndex < safeNodes.length; rightIndex += 1) {
       const left = safeNodes[leftIndex];
       const right = safeNodes[rightIndex];
-      const { score, sharedKeywords, theoryBoost } = relationScore(left, right);
-      const sharedCategories = [left.semanticGroup, left.category, right.semanticGroup, right.category]
-        .filter(Boolean)
-        .map((value) => String(value).toLowerCase());
-      const sameCategory = sharedCategories.length >= 2 && sharedCategories[0] === sharedCategories[1];
+      const { score, sharedKeywords, sharedCategories, sharedLinks, theoryBoost, repetitionScore } = relationScore(left, right);
+      const sameCategory = sharedCategories.length > 0 && String(left.semanticGroup || left.category || "").toLowerCase() === String(right.semanticGroup || right.category || "").toLowerCase();
       const sequentialBoost = rightIndex === leftIndex + 1 ? 0.22 : 0;
-      const repetitionBoost = Math.max(left.repetition || 0, right.repetition || 0) * 0.03;
       const proximityBoost = left.phase === right.phase ? 0.08 : 0;
-      const adjustedScore = score + sequentialBoost + repetitionBoost + proximityBoost;
+      const adjustedScore = score + sequentialBoost + proximityBoost;
 
       if (adjustedScore < 0.9) {
         continue;
@@ -143,17 +112,9 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
           : left.clusterKey === right.clusterKey
             ? "drift"
             : "semantic";
-      const ttl = type === "wiki" ? 6500 : type === "drift" ? 9800 : 16000;
-      const confidence = clamp(adjustedScore / 4.4, 0.18, 0.96);
-      const explanation = theoryBoost > 0.4
-        ? "Connected through the theory core's semantic field of action, participation, and transformation"
-        : sharedKeywords.length > 0
-          ? `Connected through ${sharedKeywords.slice(0, 2).join(" and ")}`
-          : sameCategory
-            ? "Connected through category clustering"
-            : left.clusterKey === right.clusterKey
-              ? "Connected through spatial drift and proximity"
-              : "Connected through semantic overlap";
+      const ttl = type === "wiki" ? 6800 : type === "drift" ? 9800 : 16000;
+      const confidence = clamp((adjustedScore / 5.2) + Math.min(0.18, theoryBoost * 0.08) + Math.min(0.12, repetitionScore * 0.06), 0.16, 0.98);
+      const explanation = explainTheoryConnection({ sharedKeywords, sharedCategories, sharedLinks, theoryBoost, repetitionScore, left, right });
 
       edges.push({
         id: `${left.id || leftIndex}-${right.id || rightIndex}`,
@@ -169,6 +130,8 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
         type,
         label: sharedKeywords[0] || left.semanticGroup || right.semanticGroup || null,
         keywords: sharedKeywords,
+        sharedCategories,
+        sharedLinks,
         explanation,
         bornAt: timestamp,
         ttl,
@@ -276,6 +239,7 @@ export function createEmergentCategories(nodes, edges = [], timestamp = now()) {
         density: Number(weightedDensity.toFixed(2)),
         stable,
         weight: Number((bucket.weight / Math.max(1, nodeCount)).toFixed(2)),
+        nodeIds: [...bucket.nodeIds],
         emergedAt: bucket.emergedAt,
       };
     })

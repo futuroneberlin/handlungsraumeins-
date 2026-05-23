@@ -45,6 +45,20 @@ function buildRelationLookup(fragments, relations) {
   return lookup;
 }
 
+function estimateCollisionRadius(fragment) {
+  const text = String(fragment.text || fragment.title || fragment.keyword || "");
+  const layoutWidth = fragment.layoutWidth || Math.max(180, Math.min(360, 160 + text.length * 4.6));
+  const lineCount = Math.max(1, Math.ceil(text.length / Math.max(16, Math.round(layoutWidth / 11))));
+  const boxHeight = Math.max(26, lineCount * 19 + 18);
+  const boxWidth = Math.max(80, layoutWidth);
+
+  if (fragment.isTheoryCore) {
+    return Math.max(128, Math.hypot(boxWidth, boxHeight) * 0.42);
+  }
+
+  return Math.max(24, Math.hypot(boxWidth, boxHeight) * 0.28);
+}
+
 export function updateFragments(fragments, relations, viewport, time, delta) {
   const safeFragments = Array.isArray(fragments) ? fragments : [];
   const safeRelations = Array.isArray(relations) ? relations : [];
@@ -62,7 +76,7 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
   const leftX = width * 0.14;
   const centerLaneX = width * 0.5;
   const rightX = width * 0.82;
-  const minDistance = Math.max(44, Math.min(width, height) * 0.07);
+  const minDistance = Math.max(32, Math.min(width, height) * 0.05);
 
   buildRelationLookup(safeFragments, safeRelations);
 
@@ -135,8 +149,9 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
       const dx = right.x - left.x;
       const dy = right.y - left.y;
       const distance = Math.max(0.001, Math.hypot(dx, dy));
+      const collisionDistance = Math.max(minDistance, estimateCollisionRadius(left) + estimateCollisionRadius(right));
 
-      if (distance >= minDistance) {
+      if (distance >= collisionDistance) {
         const repel = 0.018 / (distance * distance);
         const nx = dx / distance;
         const ny = dy / distance;
@@ -149,7 +164,7 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
 
       const sharedCluster = left.clusterKey === right.clusterKey;
       const depthGap = Math.abs((left.depthLayer || 1) - (right.depthLayer || 1));
-      const overlap = (minDistance - distance) / minDistance;
+      const overlap = (collisionDistance - distance) / collisionDistance;
       const push = overlap * (sharedCluster ? 0.012 : 0.017) * (1 + depthGap * 0.14);
       const nx = dx / distance;
       const ny = dy / distance;

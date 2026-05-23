@@ -5,6 +5,7 @@ import { updateFragments } from "./core/movement.js";
 import { updateSpatialMemory } from "./core/spatialMemory.js";
 import { createSemanticEdges, createEmergentCategories, updateRelationLayer } from "./core/relations.js";
 import { graphState, loadGraphState, scheduleGraphStateSave } from "./core/graphState.js";
+import { THEORY_CORE_TITLE, THEORY_CORE_TEXT, THEORY_CORE_KEYWORDS } from "./core/theoryModel.js";
 import { loadTheoryCorpus, flattenLines } from "./modules/theoryLoader.js";
 import { extractFoundationTerms } from "./modules/semanticExtractor.js";
 import { fetchWikipediaEntry } from "./modules/wikipedia.js";
@@ -24,19 +25,6 @@ const WIKI_TOPICS = [
 ];
 
 const THEORY_CORE_ID = "theory-core-actional-space";
-const THEORY_CORE_TITLE = "Actional Space of Aesthetic Practice";
-const THEORY_CORE_TEXT = "The Actional Space of Aesthetic Practice is an expanded sculptural environment in which the artwork loses its fixed object identity and dissolves into a living process.";
-const THEORY_CORE_KEYWORDS = [
-  "participation",
-  "transformation",
-  "body",
-  "temporality",
-  "social sculpture",
-  "space",
-  "action",
-  "interaction",
-  "process",
-];
 
 const MAX_FEED_LINES = 72;
 const FEED_INTERVAL = 420;
@@ -117,6 +105,139 @@ function buildFeedEntries(corpus) {
     opacity: 0.92,
     y: 0,
   }));
+}
+
+function mergeUniqueStrings(...values) {
+  const merged = new Map();
+  const stack = [...values];
+
+  while (stack.length) {
+    const value = stack.shift();
+    if (Array.isArray(value)) {
+      stack.unshift(...value);
+      continue;
+    }
+
+    const text = String(value || "").trim();
+    if (!text) {
+      continue;
+    }
+
+    const key = normalizeKey(text) || text.toLowerCase();
+    if (!merged.has(key)) {
+      merged.set(key, text);
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function nodeIdentity(node) {
+  return normalizeKey(node?.id || node?.wikiTitle || node?.keyword || node?.text || node?.title || "");
+}
+
+function upsertGraphNode(candidate) {
+  if (!candidate) {
+    return null;
+  }
+
+  const identity = nodeIdentity(candidate);
+  const existingIndex = state.nodes.findIndex((node) => node.id === candidate.id || nodeIdentity(node) === identity);
+  const now = performance.now();
+
+  if (existingIndex === -1) {
+    const node = {
+      appearanceCount: 1,
+      firstSeenAt: now,
+      lastSeenAt: now,
+      ...candidate,
+      keywords: mergeUniqueStrings(candidate.keywords || [], candidate.wikiCategories || [], candidate.wikiLinks || [], candidate.keyword || candidate.text),
+      wikiCategories: mergeUniqueStrings(candidate.wikiCategories || []),
+      wikiLinks: mergeUniqueStrings(candidate.wikiLinks || []),
+    };
+
+    state.nodes.push(node);
+    return node;
+  }
+
+  const existing = state.nodes[existingIndex];
+  if (existing.id === THEORY_CORE_ID) {
+    return existing;
+  }
+
+  const merged = {
+    ...existing,
+    ...candidate,
+    id: existing.id || candidate.id,
+    keywords: mergeUniqueStrings(existing.keywords || [], candidate.keywords || [], candidate.wikiCategories || [], candidate.wikiLinks || [], existing.keyword, existing.text),
+    wikiCategories: mergeUniqueStrings(existing.wikiCategories || [], candidate.wikiCategories || []),
+    wikiLinks: mergeUniqueStrings(existing.wikiLinks || [], candidate.wikiLinks || []),
+    wikiSummary: candidate.wikiSummary || existing.wikiSummary || candidate.summary || existing.summary || "",
+    wikiUrl: candidate.wikiUrl || existing.wikiUrl || candidate.url || existing.url || "",
+    category: candidate.category || existing.category,
+    semanticGroup: candidate.semanticGroup || existing.semanticGroup,
+    role: candidate.role || existing.role,
+    appearanceCount: (existing.appearanceCount || 1) + 1,
+    lastSeenAt: now,
+    firstSeenAt: existing.firstSeenAt || now,
+    weight: Math.max(existing.weight || 0, candidate.weight || 0),
+    mass: Math.max(existing.mass || 0, candidate.mass || 0),
+    layoutWidth: Math.max(existing.layoutWidth || 0, candidate.layoutWidth || 0),
+    targetX: Number.isFinite(candidate.targetX) ? candidate.targetX : existing.targetX,
+    targetY: Number.isFinite(candidate.targetY) ? candidate.targetY : existing.targetY,
+  };
+
+  state.nodes[existingIndex] = merged;
+  return merged;
+}
+
+function createWikipediaNode(entry) {
+  const width = state.viewport.width || 1280;
+  const height = state.viewport.height || 800;
+  const categories = Array.isArray(entry.categories) ? entry.categories : [];
+  const links = Array.isArray(entry.links) ? entry.links : [];
+  const title = String(entry.title || entry.term || "Wikipedia Concept").trim();
+  const summary = String(entry.summary || "").trim();
+  const primaryCategory = categories[0] || "Wikipedia";
+  const relevance = 1 + Math.min(1.2, categories.length * 0.08 + links.length * 0.01);
+
+  return {
+    id: `wiki-${normalizeKey(title)}`,
+    text: title,
+    keyword: title,
+    title,
+    source: title,
+    wikiTitle: title,
+    wikiSummary: summary,
+    wikiUrl: entry.url || "",
+    wikiCategories: categories,
+    wikiLinks: links,
+    keywords: mergeUniqueStrings([title], categories.slice(0, 6), links.slice(0, 10), summary.split(/\s+/).slice(0, 12)),
+    category: primaryCategory,
+    semanticGroup: primaryCategory,
+    role: categories.length > 3 ? "central" : "secondary",
+    phase: "ingestion",
+    x: width * 0.12,
+    y: height * (0.22 + ((state.nodes.length % 6) * 0.08)),
+    targetX: width * 0.5,
+    targetY: height * 0.46,
+    anchorX: width * 0.5,
+    anchorY: height * 0.46,
+    clusterCenterX: width * 0.5,
+    clusterCenterY: height * 0.46,
+    depthLayer: 1,
+    lane: 1,
+    rowIndex: state.nodes.length,
+    mass: relevance,
+    weight: relevance,
+    layoutWidth: Math.max(240, Math.min(360, width * 0.24)),
+    sizeScale: 1,
+    opacity: 0.94,
+    memoryOpacity: 0.76,
+    appearanceCount: 1,
+    lastSeenAt: performance.now(),
+    firstSeenAt: performance.now(),
+  };
 }
 
 function createTheoryCoreNode(viewport) {
@@ -218,7 +339,7 @@ function getNodeSummary(node) {
   }
 
   const feedLine = [...state.feedLines].reverse().find((line) => normalizeKey(line.text || line.source).includes(normalizeKey(node.keyword || node.text)));
-  return feedLine?.text || node.description || node.text || "";
+  return node.wikiSummary || feedLine?.text || node.description || node.text || "";
 }
 
 function describeEdge(edge) {
@@ -258,6 +379,8 @@ function getSelectedNodeDetails() {
     title: selectedNode.text || selectedNode.keyword || THEORY_CORE_TITLE,
     summary: getNodeSummary(selectedNode),
     type: selectedNode.id === THEORY_CORE_ID ? "Theory Core" : selectedNode.semanticGroup || selectedNode.category || selectedNode.role || "Node",
+    categories: mergeUniqueStrings(selectedNode.wikiCategories || [], selectedNode.category ? [selectedNode.category] : []),
+    links: mergeUniqueStrings(selectedNode.wikiLinks || []),
     relations: relatedEdges.map((edge) => ({
       label: edge.label || edge.type || "relation",
       explanation: describeEdge(edge),
@@ -395,6 +518,14 @@ function collectExpansionTopics(node) {
     terms.add(node.source);
   }
 
+  for (const category of node.wikiCategories || []) {
+    terms.add(category);
+  }
+
+  for (const link of node.wikiLinks || []) {
+    terms.add(link);
+  }
+
   return [...terms].slice(0, 4);
 }
 
@@ -438,6 +569,31 @@ function pickNodeAt(event) {
   return bestNode;
 }
 
+function selectNodeById(nodeId, shouldExpand = false) {
+  const node = getNodeById(nodeId);
+  if (!node) {
+    return;
+  }
+
+  state.selectedNode = node.id;
+
+  if (shouldExpand) {
+    void expandNode(node);
+  } else {
+    state.history = [
+      {
+        type: "select",
+        nodeId: node.id,
+        label: node.text || node.keyword || node.category || node.semanticGroup || "node",
+        at: Date.now(),
+      },
+      ...state.history,
+    ].slice(0, 40);
+    scheduleGraphStateSave(state);
+    renderWorkspacePanels();
+  }
+}
+
 function fitText(ctx, text, maxWidth) {
   const value = String(text || "");
   if (ctx.measureText(value).width <= maxWidth) {
@@ -459,7 +615,8 @@ function renderWorkspacePanels() {
       ...state.ingestionQueue.slice(0, 6).map((item) => ({
         title: item.source || "Ingestion",
         text: item.text || item.rawText || "",
-        meta: "raw fragment",
+        meta: `${(item.categories || item.wikiCategories || []).length} categories · ${(item.links || item.wikiLinks || []).length} links`,
+        nodeId: item.nodeId || item.id || null,
       })),
       ...state.feedLines.slice(-4).map((line) => ({
         title: line.source || "Stream",
@@ -472,7 +629,7 @@ function renderWorkspacePanels() {
       `<div class="zone-meta"><span>queue ${state.ingestionQueue.length}</span><span>transform ${state.transformationQueue.length}</span></div>`,
       state.selectedNode ? `<div class="zone-meta"><span>selected</span><span>${escapeHtml(String(state.selectedNode))}</span></div>` : "",
       ...activeItems.map((item) => `
-        <article class="zone-card">
+        <article class="zone-card"${item.nodeId ? ` data-node-id="${escapeHtml(item.nodeId)}"` : ""}>
           <strong>${escapeHtml(item.title)}</strong>
           <span>${escapeHtml(item.text)}</span>
           <small>${escapeHtml(item.meta)}</small>
@@ -492,6 +649,8 @@ function renderWorkspacePanels() {
           <strong>${escapeHtml(selectedDetails.title)}</strong>
           <span>${escapeHtml(selectedDetails.type)}</span>
           <small>${escapeHtml(selectedDetails.summary || "No summary available yet.")}</small>
+          ${selectedDetails.categories?.length ? `<small>Categories: ${escapeHtml(selectedDetails.categories.slice(0, 4).join(" · "))}</small>` : ""}
+          ${selectedDetails.links?.length ? `<small>Internal links: ${escapeHtml(selectedDetails.links.slice(0, 4).join(" · "))}</small>` : ""}
         </article>
         <article class="zone-card theory-details">
           <strong>Connection Logic</strong>
@@ -506,7 +665,7 @@ function renderWorkspacePanels() {
       ` : "",
       categories.length
         ? categories.map((category) => `
-          <article class="zone-card">
+          <article class="zone-card"${category.nodeIds?.[0] ? ` data-node-id="${escapeHtml(category.nodeIds[0])}"` : ""}>
             <strong>${escapeHtml(String(category.label || category.id || "CATEGORY").toUpperCase())}</strong>
             <span>${escapeHtml(category.stable ? "stable cluster" : "emergent cluster")}</span>
             <small>${category.nodeCount || 0} nodes · density ${escapeHtml(String(category.density ?? 0))}</small>
@@ -568,13 +727,21 @@ async function loadWikipediaPulse(topic = null) {
     }
 
     state.wikiEntries = [entry, ...state.wikiEntries].slice(0, 6);
+    const node = upsertGraphNode(createWikipediaNode(entry));
     const summaryLine = entry.summary ? `${entry.title}: ${entry.summary}` : entry.title;
     state.ingestionQueue.push({
-      id: `wiki-${normalizeKey(entry.title)}-${Date.now()}`,
+      id: node.id,
+      nodeId: node.id,
       source: entry.title,
       text: summaryLine,
       rawText: entry.summary || entry.title,
       category: entry.title,
+      categories: entry.categories || [],
+      links: entry.links || [],
+      wikiCategories: entry.categories || [],
+      wikiLinks: entry.links || [],
+      wikiSummary: entry.summary || "",
+      wikiUrl: entry.url || "",
       phase: "ingestion",
       age: 0,
       opacity: 0.94,
@@ -679,7 +846,7 @@ function tick(now) {
     if (now >= state.nextTransformationAt && state.transformationQueue.length) {
       const nextTerm = state.transformationQueue.shift();
       if (nextTerm) {
-        state.nodes.push(createTransformationFragment(nextTerm, state.nodes.length));
+        upsertGraphNode(createTransformationFragment(nextTerm, state.nodes.length));
       }
       state.nextTransformationAt = now + 480;
     }
@@ -796,6 +963,24 @@ canvas.addEventListener("click", (event) => {
 
   void expandNode(node);
   renderWorkspacePanels();
+});
+
+ingestionPanel?.addEventListener("click", (event) => {
+  const card = event.target.closest("[data-node-id]");
+  if (!card?.dataset?.nodeId) {
+    return;
+  }
+
+  selectNodeById(card.dataset.nodeId, true);
+});
+
+foundationPanel?.addEventListener("click", (event) => {
+  const card = event.target.closest("[data-node-id]");
+  if (!card?.dataset?.nodeId) {
+    return;
+  }
+
+  selectNodeById(card.dataset.nodeId, true);
 });
 
 window.addEventListener("resize", resize, { passive: true });
