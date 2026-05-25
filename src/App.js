@@ -1,39 +1,224 @@
 import { createElement, useEffect, useMemo } from "react";
 import { AppLayout } from "./components/AppLayout.js";
-import { GraphCanvas } from "./components/GraphCanvas.jsx";
+import { GraphCanvas } from "./components/GraphCanvas.js";
 import { IngestionPanel } from "./components/IngestionPanel.js";
 import { TheoryPanel } from "./components/TheoryPanel.js";
 import { FoundationPanel } from "./components/FoundationPanel.js";
 import { createGraphActions, graphStore } from "./graph/runtime.js";
+import { useGraphVersion } from "./graph/graphState.js";
+import { getSelectedNodeDetails } from "./graph/semanticResolver.js";
+
+const DEBUG_NODE_PREFIX = "debug-";
+
+function isDebugId(value) {
+  return String(value || "").startsWith(DEBUG_NODE_PREFIX);
+}
 
 export function App() {
+  useGraphVersion(graphStore);
+  const state = graphStore.getState();
+  const actions = useMemo(() => createGraphActions(graphStore), []);
+
   useEffect(() => {
-    const actions = createGraphActions(graphStore);
     let active = true;
     actions.bootstrap().catch(() => {
       if (!active) return;
     });
-    return () => { active = false; };
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [actions]);
 
-  const left = createElement(IngestionPanel, null);
-  const center = createElement(
-    "div",
-    { className: "stage-shell" },
-    createElement(GraphCanvas, null),
-  );
-  const right = createElement(
-    "aside",
-    { className: "fundament zone", "aria-label": "Emergent Categories" },
-    createElement(
+  useEffect(() => {
+    if (state.nodes.length) {
+      return;
+    }
+
+    graphStore.update((draft) => {
+      if (draft.nodes.length) {
+        return;
+      }
+
+      draft.nodes = [
+        {
+          id: "debug-ingestion-node",
+          text: "Wikipedia / Internet Ingestion",
+          wikiSummary: "Temporary test node to confirm the left panel and graph canvas stay visible.",
+          x: 240,
+          y: 260,
+          layoutWidth: 260,
+          keyword: "Ingestion",
+          semanticGroup: "Debug",
+          category: "Debug",
+        },
+        {
+          id: "debug-graph-node",
+          text: "Semantic Spatial Graph",
+          wikiSummary: "Temporary test node to confirm the center graph renders independently.",
+          x: 540,
+          y: 240,
+          layoutWidth: 260,
+          keyword: "Graph",
+          semanticGroup: "Debug",
+          category: "Debug",
+        },
+        {
+          id: "debug-theory-node",
+          text: "Theory Panel",
+          wikiSummary: "Temporary test node to confirm the right panel remains visible.",
+          x: 860,
+          y: 260,
+          layoutWidth: 260,
+          keyword: "Theory",
+          semanticGroup: "Debug",
+          category: "Debug",
+        },
+      ];
+
+      draft.edges = [
+        {
+          id: "debug-edge-left-center",
+          source: "debug-ingestion-node",
+          target: "debug-graph-node",
+          leftIndex: 0,
+          rightIndex: 1,
+          opacity: 0.32,
+          weight: 1,
+          score: 1,
+          type: "semantic",
+        },
+        {
+          id: "debug-edge-center-right",
+          source: "debug-graph-node",
+          target: "debug-theory-node",
+          leftIndex: 1,
+          rightIndex: 2,
+          opacity: 0.32,
+          weight: 1,
+          score: 1,
+          type: "semantic",
+        },
+      ];
+
+      if (!draft.selectedNode) {
+        draft.selectedNode = "debug-graph-node";
+      }
+    });
+  }, [state.nodes.length]);
+
+  useEffect(() => {
+    const hasRealNodes = state.nodes.some((node) => !isDebugId(node.id));
+    const hasDebugNodes = state.nodes.some((node) => isDebugId(node.id));
+
+    if (!hasRealNodes || !hasDebugNodes) {
+      return;
+    }
+
+    graphStore.update((draft) => {
+      draft.nodes = draft.nodes.filter((node) => !isDebugId(node.id));
+      draft.edges = draft.edges.filter((edge) => !isDebugId(edge.id));
+
+      if (isDebugId(draft.selectedNode)) {
+        draft.selectedNode = draft.nodes[0]?.id || null;
+      }
+    });
+  }, [state.nodes.length, state.corpus.length]);
+
+  const inspector = getSelectedNodeDetails(state);
+  const ingestionQueue = state.ingestionQueue.length ? state.ingestionQueue : [
+    {
+      id: "debug-ingestion-1",
+      nodeId: "debug-ingestion-node",
+      source: "Debug feed",
+      text: "Temporary ingestion entry to verify left-column visibility.",
+      rawText: "Temporary ingestion entry to verify left-column visibility.",
+      categories: ["Debug"],
+      links: [],
+      wikiCategories: ["Debug"],
+      wikiLinks: [],
+    },
+    {
+      id: "debug-ingestion-2",
+      nodeId: "debug-graph-node",
+      source: "Debug feed",
+      text: "Second test entry keeps the panel scrollable and readable.",
+      rawText: "Second test entry keeps the panel scrollable and readable.",
+      categories: ["Debug"],
+      links: [],
+      wikiCategories: ["Debug"],
+      wikiLinks: [],
+    },
+  ];
+
+  const feedLines = state.feedLines.length ? state.feedLines : [
+    {
+      id: "debug-feed-1",
+      source: "Debug stream",
+      text: "Feed line placeholder for visibility checks.",
+      opacity: 0.92,
+      y: 0,
+    },
+  ];
+
+  const debugNodes = state.nodes.length ? null : [
+    {
+      id: "debug-graph-node",
+      text: "Semantic Spatial Graph",
+      wikiSummary: "Temporary test node to confirm the center graph renders independently.",
+      x: 540,
+      y: 240,
+      layoutWidth: 260,
+    },
+  ];
+
+  const debugEdges = state.nodes.length ? null : [
+    {
+      id: "debug-graph-edge",
+      source: "debug-graph-node",
+      target: "debug-graph-node",
+      leftIndex: 0,
+      rightIndex: 0,
+      opacity: 0.18,
+      weight: 1,
+      score: 1,
+      type: "semantic",
+    },
+  ];
+
+  return createElement(AppLayout, {
+    left: createElement(IngestionPanel, {
+      queue: ingestionQueue,
+      feedLines,
+      selectedNodeId: state.selectedNode,
+      onNodeSelect: (nodeId) => actions.selectNode(nodeId, true),
+    }),
+    center: createElement(
       "div",
-      { className: "zone-header" },
-      createElement("p", { className: "eyebrow" }, "Right"),
-      createElement("h1", null, "Emergent Categories / Foundation"),
+      { className: "stage-shell" },
+      createElement(GraphCanvas, {
+        store: graphStore,
+        debugNodes,
+        debugEdges,
+        onNodeSelect: (node) => actions.selectNode(node.id, true),
+      }),
     ),
-    createElement(TheoryPanel, null),
-    createElement(FoundationPanel, null),
-  );
-
-  return createElement(AppLayout, { left, center, right });
+    right: createElement(
+      "aside",
+      { className: "fundament zone", "aria-label": "Emergent Categories" },
+      createElement(
+        "div",
+        { className: "zone-header" },
+        createElement("p", { className: "eyebrow" }, "Right"),
+        createElement("h1", null, "Emergent Categories / Foundation"),
+      ),
+      createElement(TheoryPanel, null),
+      createElement(FoundationPanel, {
+        categories: state.categories,
+        selectedInspector: inspector,
+        onNodeSelect: (nodeId) => actions.selectNode(nodeId, true),
+        nodeCount: state.nodes.length,
+        edgeCount: state.edges.length,
+      }),
+    ),
+  });
 }

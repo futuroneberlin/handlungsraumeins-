@@ -5,8 +5,8 @@ export function SemanticInspector({ title, type, summary, categories = [], links
   return createElement(
     "article",
     { className: "zone-card theory-details" },
-    createElement("strong", null, title),
-    createElement("span", null, type),
+    title ? createElement("strong", null, title) : null,
+    type ? createElement("span", null, type) : null,
     createElement("small", null, summary || "No summary available yet."),
     categories.length ? createElement("small", null, `Categories: ${categories.slice(0, 4).join(" · ")}`) : null,
     links.length ? createElement("small", null, `Internal links: ${links.slice(0, 4).join(" · ")}`) : null,

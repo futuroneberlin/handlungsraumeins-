@@ -1,9 +1,9 @@
 import { createElement } from "react";
 
-export function TheoryPanel() {
+export function TheoryPanel({ className = "", style, ...rest }) {
   return createElement(
     "details",
-    { className: "theory-core", open: true },
+    { className: `theory-core ${className}`.trim(), open: true, style, ...rest },
     createElement(
       "summary",
       null,
