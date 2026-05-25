@@ -1,13 +1,19 @@
-import { createElement, useEffect } from "react";
+import { createElement, useEffect, useMemo } from "react";
 import { AppLayout } from "./components/AppLayout.js";
-import { GraphCanvas } from "./components/GraphCanvas.js";
+import { GraphCanvas } from "./components/GraphCanvas.jsx";
 import { IngestionPanel } from "./components/IngestionPanel.js";
 import { TheoryPanel } from "./components/TheoryPanel.js";
 import { FoundationPanel } from "./components/FoundationPanel.js";
+import { createGraphActions, graphStore } from "./graph/runtime.js";
 
 export function App() {
   useEffect(() => {
-    void import("../app.js");
+    const actions = createGraphActions(graphStore);
+    let active = true;
+    actions.bootstrap().catch(() => {
+      if (!active) return;
+    });
+    return () => { active = false; };
   }, []);
 
   const left = createElement(IngestionPanel, null);

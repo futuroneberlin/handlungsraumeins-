@@ -474,21 +474,10 @@ function drawFragment(context, fragment, fontSize, accentStrength, interactionSt
   context.restore();
 }
 
-export function renderScene(context, viewport, graphStateOrFragments, relations, feedLines = []) {
-  const graphState = Array.isArray(graphStateOrFragments)
-    ? {
-      nodes: graphStateOrFragments,
-      edges: Array.isArray(relations) ? relations : [],
-      selectedNode: null,
-      debug: false,
-    }
-    : (graphStateOrFragments || {});
+export function renderScene(context, viewport /* passive background only */) {
   const safeViewport = viewport && Number.isFinite(viewport.width) && Number.isFinite(viewport.height)
     ? viewport
     : { width: 0, height: 0 };
-  const safeFragments = Array.isArray(graphState.nodes) ? graphState.nodes : [];
-  const safeRelations = Array.isArray(graphState.edges) ? graphState.edges : [];
-  const safeFeedLines = Array.isArray(feedLines) ? feedLines : [];
   const { width, height } = safeViewport;
 
   if (!context || width <= 0 || height <= 0) {
@@ -506,42 +495,6 @@ export function renderScene(context, viewport, graphStateOrFragments, relations,
     context.restore();
   }
 
-  const fragmentByIndex = safeFragments;
-  const depthSortedFragments = sortFragmentsForDepth(safeFragments);
-  const { background, middle, foreground } = splitByDepth(depthSortedFragments);
-  const selectedNodeId = graphState.selectedNode || null;
-  const neighborIds = buildNeighborSet(safeFragments, safeRelations, selectedNodeId);
-  const interactionState = { selectedNodeId, neighborIds };
-
-  for (const fragment of background) {
-    const base = Math.max(11, Math.min(21, 9.8 + fragment.weight * 7.6 + (fragment.clusterMass || 0) * 0.04));
-    const fontSize = Math.round(base * (fragment.sizeScale || 1));
-    drawFragment(context, fragment, fontSize, (Array.isArray(fragment.keywords) ? fragment.keywords.length : 0) / 4, interactionState);
-  }
-
-  for (const fragment of middle) {
-    const base = Math.max(12, Math.min(23, 10.2 + fragment.weight * 8.8 + (fragment.clusterMass || 0) * 0.06));
-    let fontSize = Math.round(base * (fragment.sizeScale || 1));
-    if (fragment.phase === "pdf") fontSize = Math.round(fontSize * 0.86);
-    const accentStrength = (Array.isArray(fragment.keywords) ? fragment.keywords.length : 0) / 4;
-    drawFragment(context, fragment, fontSize, accentStrength, interactionState);
-  }
-
-  for (const fragment of foreground) {
-    const base = Math.max(12, Math.min(24, 10.6 + fragment.weight * 9.2 + (fragment.clusterMass || 0) * 0.07));
-    const fontSize = Math.round(base * (fragment.sizeScale || 1));
-    const accentStrength = (Array.isArray(fragment.keywords) ? fragment.keywords.length : 0) / 4;
-    drawFragment(context, fragment, fontSize, accentStrength, interactionState);
-  }
-
-  for (const relation of safeRelations) {
-    const left = fragmentByIndex[relation.leftIndex];
-    const right = fragmentByIndex[relation.rightIndex];
-    if (left && right && relation.progress > 0.05) {
-      drawRelation(context, left, right, relation, interactionState);
-    }
-  }
-
   context.save();
   context.globalAlpha = 0.06;
   context.strokeStyle = "rgba(255, 255, 255, 0.06)";
@@ -549,15 +502,6 @@ export function renderScene(context, viewport, graphStateOrFragments, relations,
   context.strokeRect(16, 16, width - 32, height - 32);
   context.fillStyle = "rgba(201, 162, 39, 0.08)";
   context.fillRect(width * 0.13, 22, 1, height - 44);
-  context.fillStyle = "rgba(245, 245, 245, 0.62)";
-  context.font = '500 12px "Space Grotesk", "Helvetica Neue", "Arial Narrow", sans-serif';
-  context.textAlign = "left";
-  context.fillText("THEORY FLOW / ARCHITECTURAL SETTING", 28, 34);
-
-  if (graphState.debug) {
-    context.fillStyle = "rgba(255, 255, 255, 0.72)";
-    context.fillText(`selected ${selectedNodeId || "none"} | categories ${Array.isArray(graphState.categories) ? graphState.categories.length : 0}`, 28, 52);
-  }
   context.restore();
 }
 
