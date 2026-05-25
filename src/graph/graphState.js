@@ -37,7 +37,7 @@ export function createInitialGraphState() {
     nextWikiAt: 0,
     nextTransformationAt: 0,
     wikiCursor: 0,
-    feedSpeed: 16,
+    feedSpeed: 8,
   };
 }
 

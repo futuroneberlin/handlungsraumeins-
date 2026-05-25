@@ -12,20 +12,19 @@ const WIKI_TOPICS = [
   "Joseph Beuys",
   "Space",
   "Architecture",
-  "Society",
-  "Action",
-  "Movement",
-  "Density",
-  "Practice",
-  "Art as Experience",
-  "Art as Human Practice",
+  "Collective Action",
+  "Temporal Interaction",
 ];
 
-const MAX_FEED_LINES = 72;
-const FEED_INTERVAL = 420;
-const EXTRACTION_INTERVAL = 2600;
-const RELATION_INTERVAL = 4200;
-const WIKI_INTERVAL = 7500;
+const MAX_FEED_LINES = 24;
+const MAX_QUEUE_ITEMS = 24;
+const MAX_TRANSFORMATION_QUEUE = 12;
+const MAX_NODES = 22;
+const MAX_WIKI_ENTRIES = 3;
+const FEED_INTERVAL = 980;
+const EXTRACTION_INTERVAL = 5200;
+const RELATION_INTERVAL = 5600;
+const WIKI_INTERVAL = 18000;
 const THEORY_CORE_ID = "theory-core-actional-space";
 
 function clamp(value, min, max) {
@@ -130,6 +129,34 @@ function mergeGraphNode(state, candidate) {
 
   state.nodes[existingIndex] = merged;
   return merged;
+}
+
+function trimNodeField(state) {
+  if ((state.nodes || []).length <= MAX_NODES) {
+    return;
+  }
+
+  const removable = state.nodes
+    .map((node, index) => ({ node, index }))
+    .filter((entry) => entry.node?.id !== THEORY_CORE_ID)
+    .sort((left, right) => {
+      const leftScore = (left.node.semanticDensity || 0) + (left.node.theoryResonanceScore || 0) + (left.node.weight || 0) * 0.1;
+      const rightScore = (right.node.semanticDensity || 0) + (right.node.theoryResonanceScore || 0) + (right.node.weight || 0) * 0.1;
+      return leftScore - rightScore || (left.node.appearanceCount || 0) - (right.node.appearanceCount || 0);
+    });
+
+  const removeCount = Math.max(0, state.nodes.length - MAX_NODES);
+  const indicesToRemove = new Set(removable.slice(0, removeCount).map((entry) => entry.index));
+  if (!indicesToRemove.size) {
+    return;
+  }
+
+  state.nodes = state.nodes.filter((_, index) => !indicesToRemove.has(index));
+  state.edges = (state.edges || []).filter((edge) => {
+    const sourceId = edge.source;
+    const targetId = edge.target;
+    return state.nodes.some((node) => node.id === sourceId) && state.nodes.some((node) => node.id === targetId);
+  });
 }
 
 function refreshGraphTopology(state) {
@@ -258,7 +285,7 @@ export function createGraphActions(store) {
 
     async expandNode(node) {
       const topics = collectExpansionTopicsFromNode(node);
-      for (const topic of topics.slice(0, 3)) {
+      for (const topic of topics.slice(0, 1)) {
         void this.ingestWikipediaPulse(topic);
       }
       scheduleGraphStateSave(store.getState());
@@ -278,13 +305,16 @@ export function createGraphActions(store) {
         }
 
         store.update((draft) => {
-          draft.wikiEntries = [entry, ...draft.wikiEntries].slice(0, 6);
+          draft.wikiEntries = [entry, ...draft.wikiEntries].slice(0, MAX_WIKI_ENTRIES);
           const node = mergeGraphNode(draft, createWikipediaNode(entry, draft.viewport, draft.nodes.length));
+          if (!node) {
+            return;
+          }
           const excerpt = String(entry.summary || "")
             .replace(/\s+/g, " ")
             .trim()
             .split(/\s+/)
-            .slice(0, 18)
+            .slice(0, 14)
             .join(" ");
           draft.ingestionQueue.push(createFeedLine({
             id: node.id,
@@ -303,8 +333,12 @@ export function createGraphActions(store) {
             wikiUrl: entry.url || "",
             phase: "ingestion",
             age: 0,
-            opacity: 0.94,
+            opacity: 0.88,
           }));
+          if (draft.ingestionQueue.length > MAX_QUEUE_ITEMS) {
+            draft.ingestionQueue = draft.ingestionQueue.slice(-MAX_QUEUE_ITEMS);
+          }
+          trimNodeField(draft);
         });
         scheduleGraphStateSave(store.getState());
       } catch {
@@ -350,7 +384,7 @@ export function createGraphActions(store) {
           line.opacity = clamp(0.98 - line.age * 0.014, 0.1, 0.98);
         }
 
-        draft.feedLines = draft.feedLines.filter((line) => line.y > -28);
+        draft.feedLines = draft.feedLines.filter((line) => line.y > -28).slice(-MAX_FEED_LINES);
 
         if (now >= draft.nextExtractionAt) {
           const windowCorpus = [
@@ -358,11 +392,14 @@ export function createGraphActions(store) {
             ...draft.ingestionQueue.slice(-10).map((line) => ({ source: line.source, text: line.text })),
             ...draft.feedLines.slice(-16).map((line) => ({ source: line.source, text: line.text })),
           ];
-          const newTerms = extractFoundationTerms(windowCorpus, 18);
+          const newTerms = extractFoundationTerms(windowCorpus, 10);
           for (const term of newTerms) {
             const normalized = normalizeKey(term.text || term.keyword);
             if (!normalized || draft.termKeys.has(normalized)) {
               continue;
+            }
+            if (draft.transformationQueue.length >= MAX_TRANSFORMATION_QUEUE) {
+              break;
             }
             draft.termKeys.add(normalized);
             draft.transformationQueue.push({
@@ -413,12 +450,11 @@ export function createGraphActions(store) {
               mass: Math.max(0.9, nextTerm.weight || 1),
               age: 0,
               title: nextTerm.title || nextTerm.keyword || nextTerm.text,
-              semanticLabel: nextTerm.title || nextTerm.keyword || nextTerm.text,
               semanticExcerpt: nextTerm.excerpt || nextTerm.text || "",
-              concepts: nextTerm.keywords || [],
             });
+            trimNodeField(draft);
           }
-          draft.nextTransformationAt = now + 480;
+          draft.nextTransformationAt = now + 1400;
         }
 
         for (const fragment of draft.nodes) {

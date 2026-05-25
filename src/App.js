@@ -6,7 +6,6 @@ import { TheoryPanel } from "./components/TheoryPanel.js";
 import { FoundationPanel } from "./components/FoundationPanel.js";
 import { createGraphActions, graphStore } from "./graph/runtime.js";
 import { useGraphVersion } from "./graph/graphState.js";
-import { getSelectedNodeDetails } from "./graph/semanticResolver.js";
 
 const DEBUG_NODE_PREFIX = "debug-";
 
@@ -124,7 +123,6 @@ export function App() {
     });
   }, [state.nodes.length, state.corpus.length]);
 
-  const inspector = getSelectedNodeDetails(state);
   const ingestionQueue = state.ingestionQueue.length ? state.ingestionQueue : [
     {
       id: "debug-ingestion-1",
@@ -202,7 +200,7 @@ export function App() {
       queue: ingestionQueue,
       feedLines,
       selectedNodeId: state.selectedNode,
-      onNodeSelect: (nodeId) => actions.selectNode(nodeId, true),
+      onNodeSelect: (nodeId) => actions.selectNode(nodeId, false),
     }),
     center: createElement(
       "div",
@@ -211,7 +209,7 @@ export function App() {
         store: graphStore,
         debugNodes,
         debugEdges,
-        onNodeSelect: (node) => actions.selectNode(node.id, true),
+        onNodeSelect: (node) => actions.selectNode(node.id, false),
       }),
     ),
     right: createElement(
@@ -226,8 +224,8 @@ export function App() {
       createElement(TheoryPanel, null),
       createElement(FoundationPanel, {
         categories: state.categories,
-        selectedInspector: inspector,
-        onNodeSelect: (nodeId) => actions.selectNode(nodeId, true),
+        selectedInspector: null,
+        onNodeSelect: undefined,
         nodeCount: state.nodes.length,
         edgeCount: state.edges.length,
       }),

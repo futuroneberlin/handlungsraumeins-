@@ -517,7 +517,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
   return uniqueBy(edges, (edge) => edge.id)
     .filter((relation) => relation.leftIndex >= 0 && relation.rightIndex >= 0)
     .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(64, safeNodes.length * 2));
+    .slice(0, Math.max(24, Math.ceil(safeNodes.length * 1.2)));
 }
 
 export function createEmergentCategories(nodes, edges = [], timestamp = now()) {
@@ -604,9 +604,9 @@ export function createEmergentCategories(nodes, edges = [], timestamp = now()) {
         emergedAt: bucket.emergedAt,
       };
     })
-    .filter((category) => category.stable || category.nodeCount >= 2)
+    .filter((category) => category.stable || (category.nodeCount >= 3 && category.density >= 0.7))
     .sort((left, right) => right.nodeCount - left.nodeCount || right.density - left.density)
-    .slice(0, 12);
+    .slice(0, 6);
 }
 
 export function buildRelations(fragments, wikiEntries = [], timestamp = now()) {
@@ -619,7 +619,7 @@ export function updateRelationLayer(relations, timestamp = now()) {
       const age = timestamp - relation.bornAt;
       const progress = Math.max(0, 1 - age / relation.ttl);
       const wobble = relation.type === "wiki" ? 1 : relation.type === "drift" ? 0.84 : relation.type === "theory" ? 0.98 : 0.92;
-      const typeAlpha = relation.type === "wiki" ? 0.42 : relation.type === "drift" ? 0.34 : relation.type === "theory" ? 0.38 : 0.3;
+      const typeAlpha = relation.type === "wiki" ? 0.3 : relation.type === "drift" ? 0.22 : relation.type === "theory" ? 0.34 : 0.26;
       return {
         ...relation,
         age,
@@ -627,5 +627,5 @@ export function updateRelationLayer(relations, timestamp = now()) {
         opacity: progress * typeAlpha * wobble,
       };
     })
-    .filter((relation) => relation.progress > 0.14);
+    .filter((relation) => relation.progress > 0.24);
 }
