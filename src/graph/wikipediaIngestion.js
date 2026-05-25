@@ -1,18 +1,35 @@
 import { fetchWikipediaEntry } from "../../modules/wikipedia.js";
 import { mergeUniqueStrings, nodeIdentity } from "./graphState.js";
+import { createSemanticFragment, createConceptExcerpt, extractKeywords } from "../../modules/textFragmenter.js";
 
 export function buildFeedEntries(corpus) {
   return (Array.isArray(corpus) ? corpus : []).flatMap((entry) => {
     const text = String(entry.text || "");
-    return text
+    const fragments = text
       .split(/(?<=[.!?])\s+/)
       .map((part) => part.trim())
       .filter(Boolean)
-      .map((part) => ({ source: entry.source || "theory", text: part }));
+      .slice(0, 4);
+
+    return fragments.map((part) => {
+      const fragment = createSemanticFragment(part, { source: entry.source || "theory", excerptWords: 16, keywordLimit: 4 });
+      return {
+        ...fragment,
+        text: fragment.excerpt,
+        excerpt: fragment.excerpt,
+        age: 0,
+        opacity: 0.92,
+        y: 0,
+      };
+    });
   }).map((entry, index) => ({
-    id: `feed-${index}-${String(entry.text || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")}`,
+    id: `feed-${index}-${String(entry.excerpt || entry.text || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")}`,
     source: entry.source || "theory",
-    text: entry.text,
+    title: entry.title || entry.source || "Fragment",
+    excerpt: entry.excerpt || entry.text || "",
+    keywords: entry.keywords || [],
+    concept: entry.concept || entry.title || entry.source || "Fragment",
+    text: entry.excerpt || entry.text || "",
     age: 0,
     opacity: 0.92,
     y: 0,
@@ -27,6 +44,9 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
   const title = String(entry.title || entry.term || "Wikipedia Concept").trim();
   const summary = String(entry.summary || "").trim();
   const primaryCategory = categories[0] || "Wikipedia";
+  const summaryExcerpt = createConceptExcerpt(summary || title, 18);
+  const summaryKeywords = extractKeywords(summary || title, 5);
+  const conceptKeywords = mergeUniqueStrings([title], summaryKeywords, categories.slice(0, 4), links.slice(0, 6));
   const relevance = 1 + Math.min(1.2, categories.length * 0.08 + links.length * 0.01);
 
   return {
@@ -36,11 +56,13 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
     title,
     source: title,
     wikiTitle: title,
-    wikiSummary: summary,
+    wikiSummary: summaryExcerpt,
     wikiUrl: entry.url || "",
     wikiCategories: categories,
     wikiLinks: links,
-    keywords: mergeUniqueStrings([title], categories.slice(0, 6), links.slice(0, 10), summary.split(/\s+/).slice(0, 12)),
+    keywords: conceptKeywords,
+    concepts: conceptKeywords.slice(0, 5),
+    abstract: summaryExcerpt,
     category: primaryCategory,
     semanticGroup: primaryCategory,
     role: categories.length > 3 ? "central" : "secondary",
@@ -89,6 +111,10 @@ export function collectExpansionTopics(node) {
 
   for (const category of node?.wikiCategories || []) {
     terms.add(category);
+  }
+
+  for (const concept of node?.concepts || []) {
+    terms.add(concept);
   }
 
   for (const link of node?.wikiLinks || []) {

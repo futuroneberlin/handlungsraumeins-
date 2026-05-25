@@ -4,15 +4,15 @@ import { SemanticNodeCard } from "./SemanticNodeCard.js";
 export function IngestionPanel({ queue = [], feedLines = [], selectedNodeId, onNodeSelect, className = "", style, ...rest }) {
   const activeItems = [
     ...queue.slice(0, 6).map((item) => ({
-      title: item.source || "Ingestion",
-      text: item.text || item.rawText || "",
-      meta: `${(item.categories || item.wikiCategories || []).length} categories · ${(item.links || item.wikiLinks || []).length} links`,
+      title: item.title || item.concept || item.source || "Ingestion",
+      text: item.excerpt || item.text || item.rawText || "",
+      meta: [item.source, ...(item.keywords || item.categories || item.wikiCategories || [])].filter(Boolean).slice(0, 5).join(" · "),
       nodeId: item.nodeId || item.id || null,
     })),
     ...feedLines.slice(-4).map((line) => ({
-      title: line.source || "Stream",
-      text: line.text || "",
-      meta: "processed ingestion",
+      title: line.title || line.concept || line.source || "Stream",
+      text: line.excerpt || line.text || "",
+      meta: [line.source, ...(line.keywords || [])].filter(Boolean).slice(0, 4).join(" · "),
     })),
   ];
 

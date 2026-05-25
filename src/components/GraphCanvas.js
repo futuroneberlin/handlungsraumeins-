@@ -118,7 +118,13 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
           key: node.id,
           style: { position: "absolute", left: `${node.x}px`, top: `${node.y}px`, transform: "translate(-50%, -50%)", width: Math.max(80, node.layoutWidth || 220), pointerEvents: "auto" },
         },
-        createElement(SemanticNodeCard, { title: node.text, text: node.wikiSummary || "", nodeId: node.id, onClick: () => onNodeSelectRef.current?.(node) }),
+        createElement(SemanticNodeCard, {
+          title: node.semanticLabel || node.title || node.text,
+          text: node.semanticExcerpt || node.wikiSummary || "",
+          meta: (node.concepts || node.keywords || []).slice(0, 4).join(" · "),
+          nodeId: node.id,
+          onClick: () => onNodeSelectRef.current?.(node),
+        }),
       )),
     ),
   );

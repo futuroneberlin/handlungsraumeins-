@@ -262,11 +262,19 @@ export function createGraphActions(store) {
         store.update((draft) => {
           draft.wikiEntries = [entry, ...draft.wikiEntries].slice(0, 6);
           const node = mergeGraphNode(draft, createWikipediaNode(entry, draft.viewport, draft.nodes.length));
+          const excerpt = String(entry.summary || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .split(/\s+/)
+            .slice(0, 18)
+            .join(" ");
           draft.ingestionQueue.push(createFeedLine({
             id: node.id,
             nodeId: node.id,
             source: entry.title,
-            text: entry.summary ? `${entry.title}: ${entry.summary}` : entry.title,
+            title: entry.title,
+            text: excerpt || entry.title,
+            excerpt: excerpt || entry.title,
             rawText: entry.summary || entry.title,
             category: entry.title,
             categories: entry.categories || [],
@@ -306,7 +314,14 @@ export function createGraphActions(store) {
         if (now >= draft.nextFeedAt && draft.ingestionQueue.length) {
           const nextLine = draft.ingestionQueue.shift();
           if (nextLine) {
-            draft.feedLines.push({ ...nextLine, y: draft.viewport.height - 52, age: 0, opacity: nextLine.opacity ?? 0.94 });
+            draft.feedLines.push({
+              ...nextLine,
+              y: draft.viewport.height - 52,
+              age: 0,
+              opacity: nextLine.opacity ?? 0.94,
+              text: nextLine.excerpt || nextLine.text || "",
+              excerpt: nextLine.excerpt || nextLine.text || "",
+            });
           }
           draft.nextFeedAt = now + FEED_INTERVAL;
         }
@@ -336,7 +351,9 @@ export function createGraphActions(store) {
               ...term,
               id: normalized,
               keyword: term.keyword || term.text,
-              text: String(term.text || term.keyword || normalized),
+              title: term.title || term.keyword || term.text || normalized,
+              text: String(term.excerpt || term.text || term.keyword || normalized),
+              excerpt: term.excerpt || term.text || term.keyword || normalized,
               source: term.source || "theorie",
               age: 0,
               opacity: term.opacity ?? 0.92,
@@ -370,6 +387,10 @@ export function createGraphActions(store) {
               memoryOpacity: nextTerm.memoryOpacity ?? 0.7,
               mass: Math.max(0.9, nextTerm.weight || 1),
               age: 0,
+              title: nextTerm.title || nextTerm.keyword || nextTerm.text,
+              semanticLabel: nextTerm.title || nextTerm.keyword || nextTerm.text,
+              semanticExcerpt: nextTerm.excerpt || nextTerm.text || "",
+              concepts: nextTerm.keywords || [],
             });
           }
           draft.nextTransformationAt = now + 480;

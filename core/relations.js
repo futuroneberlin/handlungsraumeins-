@@ -1,4 +1,4 @@
-import { explainTheoryConnection, theoryAffinity, theoryResonanceTerms } from "./theoryModel.js";
+import { explainTheoryConnection, theoryAffinity, theoryResonanceTerms, stabilizeTheoryStatement } from "./theoryModel.js";
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -157,7 +157,14 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
                 : "semantic";
       const ttl = type === "wiki" ? 6800 : type === "drift" ? 9800 : 16000;
       const confidence = clamp((adjustedScore / 4.9) + Math.min(0.22, theoryBoost * 0.07) + Math.min(0.12, repetitionScore * 0.06), 0.18, 0.98);
-      const explanation = explainTheoryConnection({ sharedKeywords, sharedCategories, sharedLinks, theoryBoost, repetitionScore, left, right, leftTheorySignals: theoryResonanceTerms(left), rightTheorySignals: theoryResonanceTerms(right) });
+      const explanation = stabilizeTheoryStatement([
+        ...sharedTheorySignals,
+        ...sharedKeywords,
+        ...sharedCategories,
+        ...sharedLinks,
+        left?.semanticGroup,
+        right?.semanticGroup,
+      ], explainTheoryConnection({ sharedKeywords, sharedCategories, sharedLinks, theoryBoost, repetitionScore, left, right, leftTheorySignals: theoryResonanceTerms(left), rightTheorySignals: theoryResonanceTerms(right) }));
       const label = sharedTheorySignals[0] || sharedKeywords[0] || sharedCategories[0] || left.semanticGroup || right.semanticGroup || null;
 
       edges.push({

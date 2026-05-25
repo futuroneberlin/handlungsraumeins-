@@ -1,5 +1,5 @@
 import { createEmergentCategories, createSemanticEdges, updateRelationLayer } from "../../core/relations.js";
-import { THEORY_CORE_TEXT } from "../../core/theoryModel.js";
+import { THEORY_CORE_TEXT, theoryResonanceProfile, stabilizeTheoryStatement } from "../../core/theoryModel.js";
 
 export function refreshSemanticTopology(state, timestamp = performance.now()) {
   const nodes = Array.isArray(state.nodes) ? state.nodes : [];
@@ -41,18 +41,37 @@ export function getNodeSummary(node, state) {
     return THEORY_CORE_TEXT;
   }
 
+  const resonance = theoryResonanceProfile(node);
+  const conceptSignals = Array.from(new Set([
+    ...(node.concepts || []),
+    ...(node.keywords || []),
+    ...(node.wikiCategories || []),
+    node.category,
+    node.semanticGroup,
+  ].filter(Boolean)));
+
   const matchedWiki = (state?.wikiEntries || []).find((entry) => {
     const title = String(entry.title || "").toLowerCase();
     const keyword = String(node.keyword || node.text || node.category || node.semanticGroup || "").toLowerCase();
     return title && keyword && (title.includes(keyword) || keyword.includes(title));
   });
 
-  if (matchedWiki?.summary) {
-    return matchedWiki.summary;
-  }
-
   const feedLine = [...(state?.feedLines || [])].reverse().find((line) => String(line.text || line.source).toLowerCase().includes(String(node.keyword || node.text || "").toLowerCase()));
-  return node.wikiSummary || feedLine?.text || node.description || node.text || "";
+  const sourceSignals = [
+    matchedWiki?.title,
+    ...(matchedWiki?.categories || []),
+    ...(matchedWiki?.links || []),
+    node.abstract,
+    node.wikiSummary,
+    feedLine?.text,
+    feedLine?.excerpt,
+  ].filter(Boolean);
+
+  return stabilizeTheoryStatement([
+    ...conceptSignals,
+    ...sourceSignals,
+    ...resonance.resonanceTerms,
+  ], resonance.statement);
 }
 
 export function getSelectedNodeDetails(state) {
@@ -77,7 +96,7 @@ export function getSelectedNodeDetails(state) {
     links: Array.from(new Set(selectedNode.wikiLinks || [])),
     relations: relatedEdges.map((edge) => ({
       label: edge.label || edge.type || "relation",
-      explanation: describeEdge(edge),
+      explanation: stabilizeTheoryStatement([...(edge.sharedTheorySignals || []), ...(edge.sharedKeywords || []), ...(edge.sharedCategories || []), ...(edge.sharedLinks || [])], describeEdge(edge)),
       confidence: Math.round((edge.confidence ?? edge.score ?? 1) * 100),
       weight: edge.weight ?? edge.score ?? 1,
       evidence: Array.from(new Set([...(edge.keywords || []), ...(edge.sharedCategories || []), ...(edge.sharedLinks || []), ...(edge.sharedTheorySignals || [])])).slice(0, 4),

@@ -65,6 +65,35 @@ export function extractKeywords(text, limit = 4) {
     .map(([word]) => word);
 }
 
+export function createConceptExcerpt(text = "", maxWords = 18) {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return "";
+  }
+
+  const words = normalized.split(/\s+/);
+  if (words.length <= maxWords) {
+    return normalized;
+  }
+
+  return `${words.slice(0, maxWords).join(" ")}…`;
+}
+
+export function createSemanticFragment(text, options = {}) {
+  const source = options.source || "unbekannt";
+  const keywords = extractKeywords(text, options.keywordLimit || 4);
+  const excerpt = createConceptExcerpt(text, options.excerptWords || 18);
+  const title = options.title || keywords[0] || source;
+
+  return {
+    title,
+    source,
+    excerpt,
+    keywords,
+    concept: keywords[0] || title,
+  };
+}
+
 function createSignature(text) {
   let hash = 2166136261;
   for (let index = 0; index < text.length; index += 1) {

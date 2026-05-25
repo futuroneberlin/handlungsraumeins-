@@ -17,6 +17,29 @@ export const THEORY_CORE_KEYWORDS = [
   "public space",
 ];
 
+export const THEORY_STABILIZATION_PATTERNS = [
+  {
+    terms: ["participation", "interaction", "body"],
+    statement: "Action as sculptural participation",
+  },
+  {
+    terms: ["temporality", "process", "movement"],
+    statement: "Temporal transformation of sculptural space",
+  },
+  {
+    terms: ["social sculpture", "collective action", "community"],
+    statement: "Collective action as social sculpture",
+  },
+  {
+    terms: ["space", "practice", "relation"],
+    statement: "Spatial practice as relational formation",
+  },
+  {
+    terms: ["transformation", "process", "space"],
+    statement: "Processual transformation of spatial form",
+  },
+];
+
 const THEORY_WEIGHT_MAP = new Map([
   ["participation", 1.8],
   ["transformation", 1.7],
@@ -116,6 +139,49 @@ export function theoryAffinity(node) {
   }
 
   return score;
+}
+
+export function stabilizeTheoryStatement(signals = [], fallback = "Actional Space of Aesthetic Practice") {
+  const normalizedSignals = [...new Set((Array.isArray(signals) ? signals : [signals])
+    .flat()
+    .map(normalize)
+    .filter(Boolean))];
+
+  for (const pattern of THEORY_STABILIZATION_PATTERNS) {
+    const hasAllTerms = pattern.terms.every((term) => normalizedSignals.some((signal) => signal.includes(term) || term.includes(signal)));
+    if (hasAllTerms) {
+      return pattern.statement;
+    }
+  }
+
+  if (normalizedSignals.some((signal) => signal.includes("participation") || signal.includes("interaction"))) {
+    return "Action as participatory form";
+  }
+
+  if (normalizedSignals.some((signal) => signal.includes("temporality") || signal.includes("process"))) {
+    return "Temporal change as sculptural process";
+  }
+
+  if (normalizedSignals.some((signal) => signal.includes("collective") || signal.includes("social"))) {
+    return "Collective relation as sculptural knowledge";
+  }
+
+  if (normalizedSignals.some((signal) => signal.includes("space") || signal.includes("form"))) {
+    return "Spatial form as conceptual stabilization";
+  }
+
+  return fallback;
+}
+
+export function theoryResonanceProfile(node) {
+  const signals = collectNodeSignals(node);
+  const resonanceTerms = theoryResonanceTerms(node);
+  return {
+    signals,
+    resonanceTerms,
+    affinity: theoryAffinity(node),
+    statement: stabilizeTheoryStatement(signals.concat(resonanceTerms), THEORY_CORE_TITLE),
+  };
 }
 
 function hasAnySignal(signals, terms) {

@@ -1,5 +1,5 @@
 import { groupKeywordsBySemantic, semanticGroupOrder, assignKeywordToGroup } from "../core/semantics.js";
-import { extractKeywords, normalizeText } from "./textFragmenter.js";
+import { createConceptExcerpt, createFragments, extractKeywords, normalizeText } from "./textFragmenter.js";
 
 const RELEVANT_TERMS = new Set([
   "raum",
@@ -42,13 +42,19 @@ function classifyRole(group, rank, total) {
 export function extractFoundationTerms(corpus, maxTerms = 18) {
   const candidate = [];
   for (const entry of corpus) {
-    const text = normalizeText(entry.text || "");
-    const keywords = extractKeywords(text, 8);
-    for (const kw of keywords) {
-      const normalized = normalizeText(kw).toLowerCase();
-      if (normalized.length < 3) continue;
-      if (RELEVANT_TERMS.has(normalized) || assignKeywordToGroup(normalized)) {
-        candidate.push(normalized);
+    const fragments = createFragments(entry.text || "", {
+      source: entry.source || "theory",
+      maxFragments: 5,
+    });
+
+    for (const fragment of fragments) {
+      const keywords = extractKeywords(fragment.text || "", 5);
+      for (const kw of keywords) {
+        const normalized = normalizeText(kw).toLowerCase();
+        if (normalized.length < 3) continue;
+        if (RELEVANT_TERMS.has(normalized) || assignKeywordToGroup(normalized)) {
+          candidate.push(normalized);
+        }
       }
     }
   }
@@ -78,9 +84,12 @@ export function extractFoundationTerms(corpus, maxTerms = 18) {
   const total = chosen.length;
   const extracted = chosen.slice(0, maxTerms).map((item, idx) => {
     const role = classifyRole(item.group, idx + 1, total);
+    const excerpt = createConceptExcerpt(item.keyword, 8);
     return {
       id: `term-${item.keyword}`,
       text: item.keyword,
+      title: item.keyword,
+      excerpt,
       keywords: [item.keyword],
       keyword: item.keyword,
       weight: Math.min(1, 0.6 + (item.freq || 1) * 0.07),
@@ -94,6 +103,7 @@ export function extractFoundationTerms(corpus, maxTerms = 18) {
       preferredDepthLayer: role === "central" ? 0 : role === "secondary" ? 1 : 2,
       phase: "extraction",
       opacity: role === "central" ? 0.96 : role === "secondary" ? 0.88 : 0.72,
+      resonance: role === "central" ? 0.95 : role === "secondary" ? 0.78 : 0.62,
     };
   });
 
