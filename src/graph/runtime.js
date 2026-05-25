@@ -2,18 +2,20 @@ import { createFoundationState } from "../../core/layout.js";
 import { extractFoundationTerms } from "../../modules/semanticExtractor.js";
 import { loadTheoryCorpus } from "../../modules/theoryLoader.js";
 import { ensureTheoryCoreNode, mergeUniqueStrings, scheduleGraphStateSave } from "./graphState.js";
-import { buildFeedEntries, collectExpansionTopics, createWikipediaNode, loadWikipediaPulse } from "./wikipediaIngestion.js";
+import { buildFeedEntries, collectExpansionTopics, loadWikipediaPulse } from "./wikipediaIngestion.js";
 import { refreshCategories } from "./categoryEngine.js";
 import { advanceForceSimulation } from "./forceSimulation.js";
 import { refreshSemanticTopology } from "./semanticResolver.js";
 
 const WIKI_TOPICS = [
-  "Social Sculpture",
-  "Joseph Beuys",
-  "Space",
+  "Participation (decision making)",
+  "Temporality",
+  "Spatial interaction",
+  "Public space",
   "Architecture",
   "Collective Action",
-  "Temporal Interaction",
+  "Aesthetics",
+  "Social Sculpture",
 ];
 
 const MAX_FEED_LINES = 24;
@@ -58,6 +60,38 @@ function createFeedLine(entry) {
     age: 0,
     opacity: entry.opacity ?? 0.94,
   };
+}
+
+function cleanExtractionText(text, maxSentences = 2, maxWords = 42) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const sentences = normalized.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, maxSentences);
+  const reduced = sentences.join(" ").trim();
+  return reduced.split(/\s+/).slice(0, maxWords).join(" ");
+}
+
+function uniqueRelevantTags(values = [], max = 5) {
+  const seen = new Set();
+  const tags = [];
+  for (const value of values) {
+    const tag = String(value || "").trim();
+    if (!tag) {
+      continue;
+    }
+    const key = normalizeKey(tag);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    tags.push(tag);
+    if (tags.length >= max) {
+      break;
+    }
+  }
+  return tags;
 }
 
 function mergeGraphNode(state, candidate) {
@@ -157,6 +191,32 @@ function trimNodeField(state) {
     const sourceId = edge.source;
     const targetId = edge.target;
     return state.nodes.some((node) => node.id === sourceId) && state.nodes.some((node) => node.id === targetId);
+  });
+}
+
+function createCuratedIngestionItem(entry) {
+  const tags = uniqueRelevantTags(entry?.concepts || [], 5);
+  const cleanedExcerpt = cleanExtractionText(entry?.summary || entry?.excerpt || entry?.title || "", 2, 42);
+  return createFeedLine({
+    id: `ingestion-${normalizeKey(entry?.title || entry?.term || Date.now())}-${Date.now()}`,
+    nodeId: null,
+    source: "Wikipedia",
+    title: entry?.title || entry?.term || "Fragment",
+    text: cleanedExcerpt,
+    excerpt: cleanedExcerpt,
+    rawText: entry?.summary || entry?.excerpt || entry?.title || "",
+    category: entry?.title || "Fragment",
+    categories: [],
+    links: [],
+    keywords: tags,
+    concept: tags[0] || entry?.title || "Fragment",
+    wikiCategories: [],
+    wikiLinks: [],
+    wikiSummary: cleanedExcerpt,
+    wikiUrl: entry?.url || "",
+    phase: "ingestion",
+    age: 0,
+    opacity: 0.88,
   });
 }
 
@@ -307,42 +367,10 @@ export function createGraphActions(store) {
 
         store.update((draft) => {
           draft.wikiEntries = [entry, ...draft.wikiEntries].slice(0, MAX_WIKI_ENTRIES);
-          const node = mergeGraphNode(draft, createWikipediaNode(entry, draft.viewport, draft.nodes.length));
-          if (!node) {
-            return;
-          }
-          const excerpt = String(entry.summary || "")
-            .replace(/\s+/g, " ")
-            .trim()
-            .split(/\s+/)
-            .slice(0, 14)
-            .join(" ");
-          const curationTag = (entry.concepts || []).slice(0, 2).join(" · ");
-          draft.ingestionQueue.push(createFeedLine({
-            id: node.id,
-            nodeId: node.id,
-            source: entry.title,
-            title: entry.title,
-            text: excerpt || entry.title,
-            excerpt: excerpt || entry.title,
-            rawText: entry.summary || entry.title,
-            category: entry.title,
-            categories: entry.categories || [],
-            links: entry.links || [],
-            keywords: entry.concepts || [],
-            concept: curationTag || entry.title,
-            wikiCategories: entry.categories || [],
-            wikiLinks: entry.links || [],
-            wikiSummary: entry.summary || "",
-            wikiUrl: entry.url || "",
-            phase: "ingestion",
-            age: 0,
-            opacity: 0.88,
-          }));
+          draft.ingestionQueue.push(createCuratedIngestionItem(entry));
           if (draft.ingestionQueue.length > MAX_QUEUE_ITEMS) {
             draft.ingestionQueue = draft.ingestionQueue.slice(-MAX_QUEUE_ITEMS);
           }
-          trimNodeField(draft);
         });
         scheduleGraphStateSave(store.getState());
       } catch {
@@ -481,6 +509,13 @@ export function createGraphActions(store) {
           }
 
           fragment.age = (fragment.age || 0) + delta / 1000;
+          if ((fragment.age || 0) < 6) {
+            fragment.phase = "formation";
+          } else if ((fragment.theoryResonanceScore || 0) + (fragment.semanticDensity || 0) >= 1.1) {
+            fragment.phase = "stabilization";
+          } else {
+            fragment.phase = "transformation";
+          }
         }
 
         if (now >= draft.nextRelationAt) {

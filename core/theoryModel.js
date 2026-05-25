@@ -18,10 +18,11 @@ export const THEORY_CORE_KEYWORDS = [
 ];
 
 export const THEORY_CORE_CONSTELLATION = [
-  "Social Sculpture",
   "Participation",
-  "Transformation",
   "Temporality",
+  "Transformation",
+  "Spatial Interaction",
+  "Collapse of Subject Object Distance",
   "Collective Action",
   "Spatial Practice",
   "Embodied Interaction",
@@ -33,6 +34,7 @@ export const THEORY_CORE_CONSTELLATION = [
   "Construction",
   "Movement",
   "Spatial Tension",
+  "Social Sculpture",
 ];
 
 export const THEORY_STABILIZATION_PATTERNS = [
@@ -83,6 +85,10 @@ const THEORY_WEIGHT_MAP = new Map([
   ["experience", 1.2],
   ["relation", 1.25],
   ["spatial practice", 1.4],
+  ["spatial interaction", 1.52],
+  ["subject object", 1.45],
+  ["observer", 1.18],
+  ["author", 1.12],
   ["embodied interaction", 1.55],
 ]);
 

@@ -6,7 +6,7 @@ import { TheoryPanel } from "./components/TheoryPanel.js";
 import { FoundationPanel } from "./components/FoundationPanel.js";
 import { createGraphActions, graphStore } from "./graph/runtime.js";
 import { useGraphVersion } from "./graph/graphState.js";
-import { getTheorySynthesis } from "./graph/semanticResolver.js";
+import { getTheorySynthesis, getTheoryStabilizationEntries } from "./graph/semanticResolver.js";
 
 const DEBUG_NODE_PREFIX = "debug-";
 
@@ -196,6 +196,7 @@ export function App() {
     },
   ];
   const theorySynthesis = getTheorySynthesis(state);
+  const theoryStabilizations = getTheoryStabilizationEntries(state);
 
   return createElement(AppLayout, {
     left: createElement(IngestionPanel, {
@@ -226,6 +227,7 @@ export function App() {
       createElement(TheoryPanel, { synthesizedStatements: theorySynthesis }),
       createElement(FoundationPanel, {
         categories: state.categories,
+        stabilizations: theoryStabilizations,
         selectedInspector: null,
         onNodeSelect: undefined,
         nodeCount: state.nodes.length,

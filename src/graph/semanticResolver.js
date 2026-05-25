@@ -165,6 +165,49 @@ export function getTheorySynthesis(state) {
   return [...new Set(statements)].slice(0, 3);
 }
 
+export function getTheoryStabilizationEntries(state) {
+  const nodes = Array.isArray(state?.nodes) ? state.nodes : [];
+  const categories = Array.isArray(state?.categories) ? state.categories : [];
+  const topCategories = categories
+    .slice()
+    .sort((left, right) => (right.conceptWeight || 0) - (left.conceptWeight || 0) || (right.density || 0) - (left.density || 0))
+    .slice(0, 4);
+
+  return topCategories.map((category) => {
+    const linkedNodes = nodes
+      .filter((node) => (category.nodeIds || []).includes(node.id))
+      .sort((left, right) => (right.theoryResonanceScore || 0) - (left.theoryResonanceScore || 0))
+      .slice(0, 3);
+
+    const conceptName = String(category.label || "Conceptual Condensation");
+    const explanation = synthesizeConceptualStatement([
+      conceptName,
+      ...(category.concepts || []),
+      ...linkedNodes.flatMap((node) => node.concepts || []),
+    ], "Meaning stabilizes through theory-guided spatial transformation.");
+
+    let mapping = "Mapped to Actional Space: participation as structure and temporal emergence of form.";
+    const lower = explanation.toLowerCase();
+    if (lower.includes("temporal") || lower.includes("process")) {
+      mapping = "Mapped to Actional Space: temporality structures how fragments become form.";
+    } else if (lower.includes("spatial") || lower.includes("space")) {
+      mapping = "Mapped to Actional Space: spatial interaction organizes semantic material into readable tension.";
+    } else if (lower.includes("participation") || lower.includes("embodied")) {
+      mapping = "Mapped to Actional Space: participation collapses subject/object distance through embodied relation.";
+    } else if (lower.includes("transform")) {
+      mapping = "Mapped to Actional Space: transformation converts linguistic fragments into stabilized spatial meaning.";
+    }
+
+    return {
+      id: `stabilization-${category.id}`,
+      conceptName,
+      explanation,
+      linkedFragments: linkedNodes.map((node) => node.semanticLabel || node.title || node.keyword || node.text).filter(Boolean),
+      mapping,
+    };
+  });
+}
+
 export function updateSemanticLayers(state, timestamp = performance.now()) {
   state.edges = updateRelationLayer(state.edges, timestamp);
   return state;

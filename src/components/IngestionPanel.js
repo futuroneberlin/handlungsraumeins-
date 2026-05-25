@@ -6,13 +6,13 @@ export function IngestionPanel({ queue = [], feedLines = [], selectedNodeId, onN
     ...queue.slice(0, 4).map((item) => ({
       title: item.title || item.concept || item.source || "Ingestion",
       text: item.excerpt || item.text || item.rawText || "",
-      meta: [item.source, ...(item.keywords || item.categories || item.wikiCategories || [])].filter(Boolean).slice(0, 3).join(" · "),
+      meta: [...new Set([...(item.keywords || item.categories || item.wikiCategories || [])].filter(Boolean))].slice(0, 5).join(" · "),
       nodeId: item.nodeId || item.id || null,
     })),
     ...feedLines.slice(-3).map((line) => ({
       title: line.title || line.concept || line.source || "Stream",
       text: line.excerpt || line.text || "",
-      meta: [line.source, ...(line.keywords || [])].filter(Boolean).slice(0, 2).join(" · "),
+      meta: [...new Set((line.keywords || []).filter(Boolean))].slice(0, 5).join(" · "),
     })),
   ];
 

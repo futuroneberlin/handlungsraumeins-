@@ -1,7 +1,20 @@
 import { createElement } from "react";
 import { SemanticNodeCard } from "./SemanticNodeCard.js";
 
-export function FoundationPanel({ categories = [], selectedInspector = null, onNodeSelect, nodeCount = 0, edgeCount = 0, className = "", style, ...rest }) {
+export function FoundationPanel({ categories = [], stabilizations = [], selectedInspector = null, onNodeSelect, nodeCount = 0, edgeCount = 0, className = "", style, ...rest }) {
+  const entries = Array.isArray(stabilizations) && stabilizations.length
+    ? stabilizations
+    : categories.map((category) => ({
+      id: category.id,
+      conceptName: String(category.label || category.id || "CATEGORY"),
+      explanation: category.synopsis || (category.stable ? "stable cluster" : "emergent cluster"),
+      linkedFragments: category.concepts?.slice(0, 3) || category.keywords?.slice(0, 3) || [],
+      mapping: "Mapped to Actional Space: conceptual stabilization through transformation and relation.",
+      nodeId: category.nodeIds?.[0] || null,
+      density: category.density,
+      nodeCount: category.nodeCount,
+    }));
+
   return createElement(
     "div",
     { className: `zone-panel ${className}`.trim(), "aria-live": "polite", style, ...rest },
@@ -11,14 +24,14 @@ export function FoundationPanel({ categories = [], selectedInspector = null, onN
       createElement("span", null, `nodes ${nodeCount}`),
       createElement("span", null, `edges ${edgeCount}`),
     ),
-    categories.length ? categories.map((category) => createElement(SemanticNodeCard, {
-      key: category.id,
-      title: String(category.label || category.id || "CATEGORY"),
-      text: category.synopsis || (category.stable ? "stable cluster" : "emergent cluster"),
-      meta: `${category.nodeCount || 0} nodes · density ${String(category.density ?? 0)}`,
-      nodeId: category.nodeIds?.[0] || null,
+    entries.length ? entries.map((entry) => createElement(SemanticNodeCard, {
+      key: entry.id,
+      title: entry.conceptName,
+      text: entry.explanation,
+      meta: `${entry.mapping}${entry.nodeCount ? ` · ${entry.nodeCount} nodes` : ""}${Number.isFinite(entry.density) ? ` · density ${String(entry.density)}` : ""}`,
+      nodeId: entry.nodeId || null,
       onClick: onNodeSelect,
-      children: category.concepts?.length ? createElement("small", null, `concepts: ${category.concepts.slice(0, 3).join(" · ")}`) : category.keywords?.length ? createElement("small", null, `signals: ${category.keywords.slice(0, 3).join(" · ")}`) : null,
+      children: entry.linkedFragments?.length ? createElement("small", null, `linked fragments: ${entry.linkedFragments.slice(0, 3).join(" · ")}`) : null,
     })) : createElement(SemanticNodeCard, {
       title: "Waiting for emergence",
       text: "Categories form only after sufficient density.",
