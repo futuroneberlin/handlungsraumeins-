@@ -25,6 +25,7 @@ const FEED_INTERVAL = 980;
 const EXTRACTION_INTERVAL = 5200;
 const RELATION_INTERVAL = 5600;
 const WIKI_INTERVAL = 18000;
+const MIN_WIKI_RESONANCE = 1.15;
 const THEORY_CORE_ID = "theory-core-actional-space";
 
 function clamp(value, min, max) {
@@ -300,7 +301,7 @@ export function createGraphActions(store) {
 
       try {
         const entry = await loadWikipediaPulse(nextTopic);
-        if (!entry) {
+        if (!entry || (entry.resonanceScore || 0) < MIN_WIKI_RESONANCE || !Array.isArray(entry.concepts) || entry.concepts.length < 2) {
           return;
         }
 
@@ -316,6 +317,7 @@ export function createGraphActions(store) {
             .split(/\s+/)
             .slice(0, 14)
             .join(" ");
+          const curationTag = (entry.concepts || []).slice(0, 2).join(" · ");
           draft.ingestionQueue.push(createFeedLine({
             id: node.id,
             nodeId: node.id,
@@ -327,6 +329,8 @@ export function createGraphActions(store) {
             category: entry.title,
             categories: entry.categories || [],
             links: entry.links || [],
+            keywords: entry.concepts || [],
+            concept: curationTag || entry.title,
             wikiCategories: entry.categories || [],
             wikiLinks: entry.links || [],
             wikiSummary: entry.summary || "",

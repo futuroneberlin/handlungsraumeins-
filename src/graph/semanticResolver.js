@@ -1,5 +1,5 @@
 import { createEmergentCategories, createSemanticEdges, updateRelationLayer } from "../../core/relations.js";
-import { THEORY_CORE_TEXT, theoryResonanceProfile, stabilizeTheoryStatement } from "../../core/theoryModel.js";
+import { THEORY_CORE_TEXT, synthesizeConceptualStatement, theoryResonanceProfile, stabilizeTheoryStatement } from "../../core/theoryModel.js";
 
 export function refreshSemanticTopology(state, timestamp = performance.now()) {
   const nodes = Array.isArray(state.nodes) ? state.nodes : [];
@@ -137,6 +137,32 @@ export function getSelectedNodeDetails(state) {
       kind: edge.type || "semantic",
     })),
   };
+}
+
+export function getTheorySynthesis(state) {
+  const categories = Array.isArray(state?.categories) ? state.categories : [];
+  const nodes = Array.isArray(state?.nodes) ? state.nodes : [];
+  const strongestCategories = categories
+    .slice()
+    .sort((left, right) => (right.density || 0) - (left.density || 0) || (right.nodeCount || 0) - (left.nodeCount || 0))
+    .slice(0, 4);
+
+  const statements = [];
+  for (const category of strongestCategories) {
+    const concepts = [
+      category.label,
+      ...(category.concepts || []),
+    ];
+    const statement = synthesizeConceptualStatement(concepts, "Conceptual material stabilizes within the theory core.");
+    statements.push(statement);
+  }
+
+  if (!statements.length) {
+    const nodeConcepts = nodes.flatMap((node) => node.concepts || []).slice(0, 8);
+    statements.push(synthesizeConceptualStatement(nodeConcepts, "Language condenses into spatial relation through theory-guided curation."));
+  }
+
+  return [...new Set(statements)].slice(0, 3);
 }
 
 export function updateSemanticLayers(state, timestamp = performance.now()) {

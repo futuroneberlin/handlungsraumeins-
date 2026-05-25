@@ -54,6 +54,10 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
     categories.slice(0, 4),
     links.slice(0, 6),
   );
+  const curatedConcepts = Array.isArray(entry.curated)
+    ? entry.curated.map((item) => item.signal).slice(0, 8)
+    : conceptKeywords.slice(0, 8);
+  const resonanceScore = Number(entry.resonanceScore || 0);
   const relevance = 1 + Math.min(1.2, categories.length * 0.08 + links.length * 0.01);
 
   return {
@@ -68,13 +72,13 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
     wikiUrl: entry.url || "",
     wikiCategories: categories,
     wikiLinks: links,
-    keywords: conceptKeywords,
-    concepts: conceptKeywords.slice(0, 5),
-    semanticWeights: Object.fromEntries(conceptKeywords.slice(0, 5).map((keyword, index) => [keyword, Number((1 - index * 0.12).toFixed(3))])),
-    semanticLabel: conceptKeywords[0] || title,
+    keywords: curatedConcepts,
+    concepts: curatedConcepts.slice(0, 6),
+    semanticWeights: Object.fromEntries(curatedConcepts.slice(0, 6).map((keyword, index) => [keyword, Number((1.08 - index * 0.11).toFixed(3))])),
+    semanticLabel: curatedConcepts[0] || title,
     semanticSignature: `${String(title).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}`,
-    theoryResonanceScore: Math.min(1, 0.48 + categories.length * 0.04 + links.length * 0.01),
-    semanticDensity: Math.min(1, conceptKeywords.length / 5),
+    theoryResonanceScore: Math.min(1, 0.36 + resonanceScore * 0.28 + categories.length * 0.03),
+    semanticDensity: Math.min(1, curatedConcepts.length / 6),
     relationCandidates: [],
     abstract: summaryExcerpt,
     category: primaryCategory,

@@ -6,6 +6,7 @@ import { TheoryPanel } from "./components/TheoryPanel.js";
 import { FoundationPanel } from "./components/FoundationPanel.js";
 import { createGraphActions, graphStore } from "./graph/runtime.js";
 import { useGraphVersion } from "./graph/graphState.js";
+import { getTheorySynthesis } from "./graph/semanticResolver.js";
 
 const DEBUG_NODE_PREFIX = "debug-";
 
@@ -194,6 +195,7 @@ export function App() {
       type: "semantic",
     },
   ];
+  const theorySynthesis = getTheorySynthesis(state);
 
   return createElement(AppLayout, {
     left: createElement(IngestionPanel, {
@@ -221,7 +223,7 @@ export function App() {
         createElement("p", { className: "eyebrow" }, "Right"),
         createElement("h1", null, "Emergent Categories / Foundation"),
       ),
-      createElement(TheoryPanel, null),
+      createElement(TheoryPanel, { synthesizedStatements: theorySynthesis }),
       createElement(FoundationPanel, {
         categories: state.categories,
         selectedInspector: null,

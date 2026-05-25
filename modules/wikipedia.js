@@ -1,3 +1,5 @@
+import { curateSemanticSignals, THEORY_CORE_CONSTELLATION } from "../core/theoryModel.js";
+
 const DEFAULT_ENDPOINT = "https://en.wikipedia.org/w/api.php";
 
 const NOISE_PATTERNS = [
@@ -66,11 +68,20 @@ function toConceptKeywords(title, summary = "", categories = []) {
     frequency.set(word, (frequency.get(word) || 0) + 1);
   }
 
-  return [...frequency.entries()]
+  const extracted = [...frequency.entries()]
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 6)
     .map(([word]) => word)
     .filter(isConceptualText);
+
+  const curated = curateSemanticSignals([
+    title,
+    ...categories,
+    ...extracted,
+    ...THEORY_CORE_CONSTELLATION,
+  ], { minScore: 1.05 });
+
+  return curated.map((item) => item.signal).slice(0, 6);
 }
 
 function normalizeTerm(term) {
@@ -128,15 +139,36 @@ export async function fetchWikipediaEntry(term) {
     .slice(0, 28)
     .join(" ");
   const concepts = toConceptKeywords(page.title || title, summary, categories);
+  const curatedSemanticMaterial = curateSemanticSignals([
+    page.title || title,
+    summary,
+    ...categories,
+    ...internalLinks.slice(0, 10),
+    ...concepts,
+  ], { minScore: 1.12 });
+
+  if (curatedSemanticMaterial.length < 2) {
+    return null;
+  }
+
+  const filteredCategories = categories.filter((category) =>
+    curatedSemanticMaterial.some((item) => item.signal.includes(normalizeTerm(category).toLowerCase()) || normalizeTerm(category).toLowerCase().includes(item.signal)),
+  );
+  const filteredLinks = internalLinks.filter((link) =>
+    curatedSemanticMaterial.some((item) => item.signal.includes(normalizeTerm(link).toLowerCase()) || normalizeTerm(link).toLowerCase().includes(item.signal)),
+  );
+  const resonanceScore = Number((curatedSemanticMaterial.reduce((sum, item) => sum + item.score, 0) / Math.max(1, curatedSemanticMaterial.length)).toFixed(3));
 
   return {
     term: query,
     title: page.title || title,
     summary: excerpt,
     excerpt,
-    categories,
-    links: internalLinks,
-    concepts,
+    categories: filteredCategories.slice(0, 8),
+    links: filteredLinks.slice(0, 12),
+    concepts: curatedSemanticMaterial.map((item) => item.signal).slice(0, 8),
+    curated: curatedSemanticMaterial,
+    resonanceScore,
     pageid: page.pageid,
     url: page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent((page.title || title).replace(/\s+/g, "_"))}`,
   };

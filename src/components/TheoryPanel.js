@@ -1,6 +1,8 @@
 import { createElement } from "react";
 
-export function TheoryPanel({ className = "", style, ...rest }) {
+export function TheoryPanel({ synthesizedStatements = [], className = "", style, ...rest }) {
+  const statements = Array.isArray(synthesizedStatements) ? synthesizedStatements.filter(Boolean).slice(0, 3) : [];
+
   return createElement(
     "section",
     { className: `theory-core ${className}`.trim(), style, ...rest },
@@ -24,6 +26,8 @@ export function TheoryPanel({ className = "", style, ...rest }) {
         createElement("li", null, "From Volume to Body / Action"),
         createElement("li", null, "From Static Object to Time / Interaction"),
       ),
+      statements.length ? createElement("p", { className: "theory-principle-label" }, "Current Synthesis") : null,
+      ...statements.map((statement, index) => createElement("p", { key: `synthesis-${index}` }, statement)),
     ),
   );
 }

@@ -17,6 +17,24 @@ export const THEORY_CORE_KEYWORDS = [
   "public space",
 ];
 
+export const THEORY_CORE_CONSTELLATION = [
+  "Social Sculpture",
+  "Participation",
+  "Transformation",
+  "Temporality",
+  "Collective Action",
+  "Spatial Practice",
+  "Embodied Interaction",
+  "Experience",
+  "Relation",
+  "Process",
+  "Material",
+  "Gesture",
+  "Construction",
+  "Movement",
+  "Spatial Tension",
+];
+
 export const THEORY_STABILIZATION_PATTERNS = [
   {
     terms: ["participation", "interaction", "body"],
@@ -58,6 +76,14 @@ const THEORY_WEIGHT_MAP = new Map([
   ["movement", 1.15],
   ["community", 1.05],
   ["collective", 1.08],
+  ["material", 1.2],
+  ["gesture", 1.18],
+  ["construction", 1.22],
+  ["spatial tension", 1.32],
+  ["experience", 1.2],
+  ["relation", 1.25],
+  ["spatial practice", 1.4],
+  ["embodied interaction", 1.55],
 ]);
 
 function normalize(value) {
@@ -66,6 +92,79 @@ function normalize(value) {
     .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function uniqueNormalized(values = []) {
+  return [...new Set((Array.isArray(values) ? values : [values])
+    .flat()
+    .map(normalize)
+    .filter(Boolean))];
+}
+
+export function curateSemanticSignals(signals = [], options = {}) {
+  const minScore = Number.isFinite(options.minScore) ? options.minScore : 1.15;
+  const normalizedSignals = uniqueNormalized(signals);
+  const curated = [];
+
+  for (const signal of normalizedSignals) {
+    let score = 0;
+    const matchedAnchors = [];
+
+    for (const anchor of THEORY_CORE_CONSTELLATION) {
+      const normalizedAnchor = normalize(anchor);
+      if (signal.includes(normalizedAnchor) || normalizedAnchor.includes(signal)) {
+        matchedAnchors.push(anchor);
+        score += 0.85;
+      }
+    }
+
+    for (const [term, weight] of THEORY_WEIGHT_MAP.entries()) {
+      if (signal.includes(term) || term.includes(signal)) {
+        score += weight * 0.34;
+      }
+    }
+
+    if (signal.length < 4 || /^(category|article|page|edit|citation|reference|template)$/i.test(signal)) {
+      score -= 1.4;
+    }
+
+    if (score >= minScore) {
+      curated.push({
+        signal,
+        score: Number(score.toFixed(3)),
+        anchors: matchedAnchors,
+      });
+    }
+  }
+
+  return curated.sort((left, right) => right.score - left.score || left.signal.localeCompare(right.signal));
+}
+
+export function synthesizeConceptualStatement(concepts = [], fallback = THEORY_CORE_TITLE) {
+  const curated = curateSemanticSignals(concepts, { minScore: 0.9 }).map((item) => item.signal);
+  const has = (term) => curated.some((signal) => signal.includes(term));
+
+  if (has("participation") && (has("embodied") || has("body")) && (has("collective") || has("social"))) {
+    return "Embodied participation transforms spatial experience into collective sculptural action.";
+  }
+
+  if ((has("temporality") || has("time") || has("process")) && (has("transformation") || has("movement"))) {
+    return "Temporal process reshapes movement into a sustained sculptural transformation field.";
+  }
+
+  if ((has("space") || has("spatial")) && (has("practice") || has("construction") || has("material"))) {
+    return "Spatial practice condenses material relations into a readable architectural tension.";
+  }
+
+  if (has("social sculpture") || (has("collective") && has("relation"))) {
+    return "Social sculpture stabilizes relation as a shared material of collective formation.";
+  }
+
+  if (curated.length >= 2) {
+    return `${curated[0].replace(/^./, (char) => char.toUpperCase())} and ${curated[1]} condense into a processual sculptural relation.`;
+  }
+
+  return fallback;
 }
 
 function collectNodeSignals(node) {
