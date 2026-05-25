@@ -31,6 +31,36 @@ const RELEVANT_TERMS = new Set([
   "bertram",
 ]);
 
+const CONCEPT_MAP = [
+  { terms: ["beuys", "soziale", "sozial", "gesellschaft"], label: "Collective Participation", group: "Gesellschaft" },
+  { terms: ["praxis", "handlung", "aktivität"], label: "Embodied Action", group: "Handlung" },
+  { terms: ["prozess", "bewegung", "zeit"], label: "Temporal Interaction", group: "Handlung" },
+  { terms: ["raum", "architektur", "struktur", "fundament"], label: "Spatial Transformation", group: "Raum" },
+  { terms: ["plastik", "kunst", "erfahrung"], label: "Expanded Art Practice", group: "Kunst" },
+  { terms: ["verdichtung", "schichtung", "konstruktion"], label: "Processual Sculpture", group: "Konstruktion" },
+  { terms: ["körper"], label: "Embodied Practice", group: "Handlung" },
+  { terms: ["relation", "öffentlichkeit"], label: "Relational Space", group: "Gesellschaft" },
+];
+
+function conceptLabelFor(keyword, group) {
+  const normalized = normalizeText(keyword).toLowerCase();
+  for (const concept of CONCEPT_MAP) {
+    if (concept.terms.some((term) => normalized.includes(term) || term.includes(normalized))) {
+      return { label: concept.label, group: concept.group || group };
+    }
+  }
+
+  const fallbackByGroup = {
+    Raum: "Spatial Configuration",
+    Handlung: "Processual Action",
+    Gesellschaft: "Collective Relation",
+    Kunst: "Aesthetic Practice",
+    Konstruktion: "Structural Formation",
+  };
+
+  return { label: fallbackByGroup[group] || keyword, group };
+}
+
 function classifyRole(group, rank, total) {
   const centralGroups = ["Raum", "Handlung", "Gesellschaft", "Kunst", "Konstruktion"];
   if (centralGroups.includes(group)) return "central";
@@ -85,17 +115,19 @@ export function extractFoundationTerms(corpus, maxTerms = 18) {
   const extracted = chosen.slice(0, maxTerms).map((item, idx) => {
     const role = classifyRole(item.group, idx + 1, total);
     const excerpt = createConceptExcerpt(item.keyword, 8);
+    const concept = conceptLabelFor(item.keyword, item.group);
     return {
       id: `term-${item.keyword}`,
-      text: item.keyword,
-      title: item.keyword,
+      text: concept.label,
+      title: concept.label,
       excerpt,
-      keywords: [item.keyword],
-      keyword: item.keyword,
+      keywords: [concept.label, item.keyword],
+      keyword: concept.label,
+      sourceKeyword: item.keyword,
       weight: Math.min(1, 0.6 + (item.freq || 1) * 0.07),
       rarity: Math.max(0.3, 1 - (item.freq || 1) * 0.08),
       repetition: Math.max(0, (item.freq || 1) - 1),
-      semanticGroup: item.group,
+      semanticGroup: concept.group,
       role,
       source: "theory",
       fragmentOrder: idx,

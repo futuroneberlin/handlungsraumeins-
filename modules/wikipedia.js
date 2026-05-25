@@ -1,5 +1,78 @@
 const DEFAULT_ENDPOINT = "https://en.wikipedia.org/w/api.php";
 
+const NOISE_PATTERNS = [
+  /^articles with /i,
+  /^all articles /i,
+  /^use dmy dates/i,
+  /^pages? using /i,
+  /^wikipedia /i,
+  /^cs1 /i,
+  /^short description/i,
+  /^webarchive/i,
+  /^pages? with /i,
+  /^maintenance /i,
+  /^disambiguation /i,
+  /^living people$/i,
+  /^use /i,
+  /^stub$/i,
+];
+
+const GENERIC_NOISE = new Set([
+  "article",
+  "articles",
+  "page",
+  "pages",
+  "wikipedia",
+  "citation",
+  "references",
+  "source",
+  "sources",
+  "category",
+  "categories",
+  "pageid",
+  "info",
+]);
+
+function isConceptualText(value) {
+  const text = normalizeTerm(value).toLowerCase();
+  if (!text) {
+    return false;
+  }
+
+  if (text.length < 3) {
+    return false;
+  }
+
+  if (NOISE_PATTERNS.some((pattern) => pattern.test(text))) {
+    return false;
+  }
+
+  if (GENERIC_NOISE.has(text)) {
+    return false;
+  }
+
+  return !/\b(?:edit|citation|template|stub|disambiguation|maintenance|wikipedia)\b/i.test(text);
+}
+
+function toConceptKeywords(title, summary = "", categories = []) {
+  const words = normalizeTerm(`${title} ${summary} ${categories.join(" ")}`)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 3 && !GENERIC_NOISE.has(word));
+
+  const frequency = new Map();
+  for (const word of words) {
+    frequency.set(word, (frequency.get(word) || 0) + 1);
+  }
+
+  return [...frequency.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 6)
+    .map(([word]) => word)
+    .filter(isConceptualText);
+}
+
 function normalizeTerm(term) {
   return String(term || "")
     .replace(/[^\p{L}\p{N}\s-]/gu, " ")
@@ -28,7 +101,7 @@ function extractListTitles(items = [], prefix = "") {
     .map((item) => String(item?.title || ""))
     .map((title) => title.replace(new RegExp(`^${prefix}`, "i"), ""))
     .map((title) => title.trim())
-    .filter(Boolean);
+    .filter(isConceptualText);
 }
 
 export async function fetchWikipediaEntry(term) {
@@ -48,13 +121,22 @@ export async function fetchWikipediaEntry(term) {
 
   const categories = extractListTitles(page.categories, "Category:").slice(0, 12);
   const internalLinks = extractListTitles(page.links).slice(0, 24);
+  const summary = String(page.extract || "").trim();
+  const excerpt = summary
+    .replace(/\s+/g, " ")
+    .split(/\s+/)
+    .slice(0, 28)
+    .join(" ");
+  const concepts = toConceptKeywords(page.title || title, summary, categories);
 
   return {
     term: query,
     title: page.title || title,
-    summary: String(page.extract || "").trim(),
+    summary: excerpt,
+    excerpt,
     categories,
     links: internalLinks,
+    concepts,
     pageid: page.pageid,
     url: page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent((page.title || title).replace(/\s+/g, "_"))}`,
   };

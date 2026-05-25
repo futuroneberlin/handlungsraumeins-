@@ -32,6 +32,17 @@ export function describeEdge(edge) {
   return labels[edge.type] || "related through the theory core";
 }
 
+function collectConceptSignals(node) {
+  return Array.from(new Set([
+    ...(node?.concepts || []),
+    ...(node?.keywords || []),
+    ...(node?.wikiCategories || []),
+    node?.semanticGroup,
+    node?.category,
+    node?.role,
+  ].filter(Boolean)));
+}
+
 export function getNodeSummary(node, state) {
   if (!node) {
     return "";
@@ -42,13 +53,7 @@ export function getNodeSummary(node, state) {
   }
 
   const resonance = theoryResonanceProfile(node);
-  const conceptSignals = Array.from(new Set([
-    ...(node.concepts || []),
-    ...(node.keywords || []),
-    ...(node.wikiCategories || []),
-    node.category,
-    node.semanticGroup,
-  ].filter(Boolean)));
+  const conceptSignals = collectConceptSignals(node);
 
   const matchedWiki = (state?.wikiEntries || []).find((entry) => {
     const title = String(entry.title || "").toLowerCase();
@@ -60,11 +65,13 @@ export function getNodeSummary(node, state) {
   const sourceSignals = [
     matchedWiki?.title,
     ...(matchedWiki?.categories || []),
+    ...(matchedWiki?.concepts || []),
     ...(matchedWiki?.links || []),
     node.abstract,
+    node.semanticExcerpt,
     node.wikiSummary,
-    feedLine?.text,
     feedLine?.excerpt,
+    feedLine?.concept,
   ].filter(Boolean);
 
   return stabilizeTheoryStatement([
@@ -89,10 +96,10 @@ export function getSelectedNodeDetails(state) {
     .slice(0, 6);
 
   return {
-    title: selectedNode.text || selectedNode.keyword || "Actional Space of Aesthetic Practice",
+    title: selectedNode.title || selectedNode.semanticLabel || selectedNode.text || selectedNode.keyword || "Actional Space of Aesthetic Practice",
     summary: getNodeSummary(selectedNode, state),
     type: selectedNode.id === "theory-core-actional-space" ? "Theory Core" : selectedNode.semanticGroup || selectedNode.category || selectedNode.role || "Node",
-    categories: Array.from(new Set([...(selectedNode.wikiCategories || []), ...(selectedNode.category ? [selectedNode.category] : [])])),
+    categories: Array.from(new Set([...(selectedNode.concepts || []), ...(selectedNode.wikiCategories || []), ...(selectedNode.category ? [selectedNode.category] : [])])),
     links: Array.from(new Set(selectedNode.wikiLinks || [])),
     relations: relatedEdges.map((edge) => ({
       label: edge.label || edge.type || "relation",

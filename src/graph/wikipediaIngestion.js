@@ -15,6 +15,7 @@ export function buildFeedEntries(corpus) {
       const fragment = createSemanticFragment(part, { source: entry.source || "theory", excerptWords: 16, keywordLimit: 4 });
       return {
         ...fragment,
+        title: fragment.title,
         text: fragment.excerpt,
         excerpt: fragment.excerpt,
         age: 0,
@@ -46,7 +47,13 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
   const primaryCategory = categories[0] || "Wikipedia";
   const summaryExcerpt = createConceptExcerpt(summary || title, 18);
   const summaryKeywords = extractKeywords(summary || title, 5);
-  const conceptKeywords = mergeUniqueStrings([title], summaryKeywords, categories.slice(0, 4), links.slice(0, 6));
+  const conceptKeywords = mergeUniqueStrings(
+    [title],
+    entry.concepts || [],
+    summaryKeywords,
+    categories.slice(0, 4),
+    links.slice(0, 6),
+  );
   const relevance = 1 + Math.min(1.2, categories.length * 0.08 + links.length * 0.01);
 
   return {
@@ -57,6 +64,7 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
     source: title,
     wikiTitle: title,
     wikiSummary: summaryExcerpt,
+    abstract: summaryExcerpt,
     wikiUrl: entry.url || "",
     wikiCategories: categories,
     wikiLinks: links,
