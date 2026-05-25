@@ -6,7 +6,33 @@ export function refreshSemanticTopology(state, timestamp = performance.now()) {
   const wikiEntries = Array.isArray(state.wikiEntries) ? state.wikiEntries : [];
   const edges = createSemanticEdges(nodes, wikiEntries, timestamp);
   const categories = createEmergentCategories(nodes, edges, timestamp);
+  const relationCandidatesByNode = new Map();
+
+  for (const node of nodes) {
+    relationCandidatesByNode.set(node.id, []);
+  }
+
+  for (const edge of edges) {
+    const left = nodes[edge.leftIndex ?? edge.sourceIndex ?? -1];
+    const right = nodes[edge.rightIndex ?? edge.targetIndex ?? -1];
+    if (!left || !right) {
+      continue;
+    }
+
+    const leftCandidates = relationCandidatesByNode.get(left.id) || [];
+    const rightCandidates = relationCandidatesByNode.get(right.id) || [];
+    leftCandidates.push({ id: edge.id, targetId: right.id, label: edge.label, confidence: edge.confidence, score: edge.score, kind: edge.type, concepts: edge.sharedConcepts || [] });
+    rightCandidates.push({ id: edge.id, targetId: left.id, label: edge.label, confidence: edge.confidence, score: edge.score, kind: edge.type, concepts: edge.sharedConcepts || [] });
+    relationCandidatesByNode.set(left.id, leftCandidates);
+    relationCandidatesByNode.set(right.id, rightCandidates);
+  }
+
+  state.nodes = nodes.map((node) => ({
+    ...node,
+    relationCandidates: (relationCandidatesByNode.get(node.id) || []).sort((left, right) => (right.score || 0) - (left.score || 0)).slice(0, 5),
+  }));
   return {
+    nodes: state.nodes,
     edges,
     categories,
   };
@@ -22,11 +48,11 @@ export function describeEdge(edge) {
   }
 
   const labels = {
-    wiki: "linked through live Wikipedia ingestion",
-    semantic: "connected through participation and semantic overlap",
-    category: "connected through category clustering",
-    theory: "connected through the theory core's semantic gravity",
-    drift: "connected through spatial drift and proximity",
+    wiki: "linked through live Wikipedia concept transfer",
+    semantic: "linked through shared conceptual density",
+    category: "linked through synthesized category overlap",
+    theory: "linked through theory-core resonance",
+    drift: "linked through spatial proximity",
   };
 
   return labels[edge.type] || "related through the theory core";
@@ -102,11 +128,12 @@ export function getSelectedNodeDetails(state) {
     categories: Array.from(new Set([...(selectedNode.concepts || []), ...(selectedNode.wikiCategories || []), ...(selectedNode.category ? [selectedNode.category] : [])])),
     links: Array.from(new Set(selectedNode.wikiLinks || [])),
     relations: relatedEdges.map((edge) => ({
+      id: edge.id,
       label: edge.label || edge.type || "relation",
-      explanation: stabilizeTheoryStatement([...(edge.sharedTheorySignals || []), ...(edge.sharedKeywords || []), ...(edge.sharedCategories || []), ...(edge.sharedLinks || [])], describeEdge(edge)),
+      explanation: edge.explanation || stabilizeTheoryStatement([...(edge.sharedConcepts || []), ...(edge.sharedTheorySignals || []), ...(edge.sharedKeywords || []), ...(edge.sharedCategories || []), ...(edge.sharedLinks || [])], describeEdge(edge)),
       confidence: Math.round((edge.confidence ?? edge.score ?? 1) * 100),
       weight: edge.weight ?? edge.score ?? 1,
-      evidence: Array.from(new Set([...(edge.keywords || []), ...(edge.sharedCategories || []), ...(edge.sharedLinks || []), ...(edge.sharedTheorySignals || [])])).slice(0, 4),
+      evidence: Array.from(new Set([...(edge.sharedConcepts || []), ...(edge.keywords || []), ...(edge.sharedCategories || []), ...(edge.sharedLinks || []), ...(edge.sharedTheorySignals || [])])).slice(0, 4),
       kind: edge.type || "semantic",
     })),
   };

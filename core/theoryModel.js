@@ -188,11 +188,14 @@ function hasAnySignal(signals, terms) {
   return signals.some((signal) => terms.some((term) => signal.includes(term)));
 }
 
-export function explainTheoryConnection({ sharedKeywords = [], sharedCategories = [], sharedLinks = [], theoryBoost = 0, repetitionScore = 0, left, right, leftTheorySignals = [], rightTheorySignals = [] }) {
+export function explainTheoryConnection({ sharedKeywords = [], sharedCategories = [], sharedLinks = [], sharedConcepts = [], theoryBoost = 0, repetitionScore = 0, left, right, leftTheorySignals = [], rightTheorySignals = [] }) {
+  const leftLabel = String(left?.semanticLabel || left?.title || left?.keyword || left?.text || "Concept");
+  const rightLabel = String(right?.semanticLabel || right?.title || right?.keyword || right?.text || "Concept");
   const signals = normalize([
     ...sharedKeywords,
     ...sharedCategories,
     ...sharedLinks,
+    ...sharedConcepts,
     left?.keyword,
     left?.text,
     left?.category,
@@ -209,30 +212,30 @@ export function explainTheoryConnection({ sharedKeywords = [], sharedCategories 
 
   if (theoryBoost > 0.8) {
     if (theorySignals.includes("participation") || theorySignals.includes("interaction")) {
-      return "Connected through the theory core's field of participation and interaction";
+      return `Participation and interaction bind ${leftLabel} with ${rightLabel} through the theory core.`;
     }
 
     if (theorySignals.includes("transformation") || theorySignals.includes("social sculpture")) {
-      return "Connected through the theory core's sculptural field of transformation";
+      return `The theory core frames ${leftLabel} and ${rightLabel} as a sculptural transformation field.`;
     }
 
     if (theorySignals.includes("collective action") || theorySignals.includes("community")) {
-      return "Connected through the theory core's field of collective action";
+      return `Collective action links ${leftLabel} and ${rightLabel} within the theory core.`;
     }
 
-    return "Connected through the theory core's field of action, participation, and transformation";
+    return `Theory resonance keeps ${leftLabel} and ${rightLabel} in a shared field of action and transformation.`;
   }
 
   if (hasAnySignal(signals, ["participation", "interaction", "participatory"])) {
-    return "Connected through participation and interaction";
+    return `Participation and interaction connect ${leftLabel} with ${rightLabel}.`;
   }
 
   if (hasAnySignal(signals, ["transformation", "body", "sculpture", "practice", "process"])) {
-    return "Linked by sculptural transformation";
+    return `Sculptural transformation links ${leftLabel} with ${rightLabel}.`;
   }
 
   if (hasAnySignal(signals, ["space", "public", "society", "community", "collective action"])) {
-    return "Related through public space";
+    return `Public space and collective relation connect ${leftLabel} with ${rightLabel}.`;
   }
 
   if (sharedCategories.length > 0) {
@@ -244,12 +247,12 @@ export function explainTheoryConnection({ sharedKeywords = [], sharedCategories 
   }
 
   if (sharedKeywords.length > 0) {
-    return `Connected through ${sharedKeywords.slice(0, 2).join(" and ")}`;
+    return `Connected through ${sharedKeywords.slice(0, 2).join(" and ")} between ${leftLabel} and ${rightLabel}.`;
   }
 
   if (repetitionScore > 0.2) {
-    return "Related through repeated contextual appearance";
+    return `Repeated contextual appearance keeps ${leftLabel} and ${rightLabel} in proximity.`;
   }
 
-  return "Related through semantic overlap";
+  return `Semantic overlap keeps ${leftLabel} and ${rightLabel} in relation.`;
 }

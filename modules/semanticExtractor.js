@@ -116,18 +116,30 @@ export function extractFoundationTerms(corpus, maxTerms = 18) {
     const role = classifyRole(item.group, idx + 1, total);
     const excerpt = createConceptExcerpt(item.keyword, 8);
     const concept = conceptLabelFor(item.keyword, item.group);
+    const semanticWeights = {
+      [concept.label]: 1,
+      [item.keyword]: 0.84,
+      [concept.group]: 0.72,
+    };
     return {
       id: `term-${item.keyword}`,
       text: concept.label,
       title: concept.label,
       excerpt,
       keywords: [concept.label, item.keyword],
+      concepts: [concept.label, item.keyword, concept.group],
       keyword: concept.label,
       sourceKeyword: item.keyword,
       weight: Math.min(1, 0.6 + (item.freq || 1) * 0.07),
       rarity: Math.max(0.3, 1 - (item.freq || 1) * 0.08),
       repetition: Math.max(0, (item.freq || 1) - 1),
       semanticGroup: concept.group,
+      semanticWeights,
+      theoryResonanceScore: role === "central" ? 0.92 : role === "secondary" ? 0.74 : 0.58,
+      semanticDensity: Math.min(1, 0.32 + item.freq * 0.06),
+      semanticSignature: `term-${item.keyword}-${concept.group}`,
+      semanticLabel: concept.label,
+      relationCandidates: [],
       role,
       source: "theory",
       fragmentOrder: idx,

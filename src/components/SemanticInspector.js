@@ -14,7 +14,7 @@ export function SemanticInspector({ title, type, summary, categories = [], links
       "div",
       { className: "theory-details" },
       ...relations.map((relation) => createElement(SemanticNodeCard, {
-        key: `${relation.label}-${relation.explanation}`,
+        key: relation.id || `${relation.label}-${relation.explanation}`,
         className: "theory-details",
         title: relation.label,
         text: `${relation.explanation} · confidence ${relation.confidence}%`,

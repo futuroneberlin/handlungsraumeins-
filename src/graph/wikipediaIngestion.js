@@ -70,6 +70,12 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
     wikiLinks: links,
     keywords: conceptKeywords,
     concepts: conceptKeywords.slice(0, 5),
+    semanticWeights: Object.fromEntries(conceptKeywords.slice(0, 5).map((keyword, index) => [keyword, Number((1 - index * 0.12).toFixed(3))])),
+    semanticLabel: conceptKeywords[0] || title,
+    semanticSignature: `${String(title).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}`,
+    theoryResonanceScore: Math.min(1, 0.48 + categories.length * 0.04 + links.length * 0.01),
+    semanticDensity: Math.min(1, conceptKeywords.length / 5),
+    relationCandidates: [],
     abstract: summaryExcerpt,
     category: primaryCategory,
     semanticGroup: primaryCategory,
@@ -123,6 +129,12 @@ export function collectExpansionTopics(node) {
 
   for (const concept of node?.concepts || []) {
     terms.add(concept);
+  }
+
+  for (const candidate of node?.relationCandidates || []) {
+    if (candidate?.label) {
+      terms.add(candidate.label);
+    }
   }
 
   for (const link of node?.wikiLinks || []) {

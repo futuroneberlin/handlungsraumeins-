@@ -76,8 +76,15 @@ function mergeGraphNode(state, candidate) {
       lastSeenAt: now,
       ...candidate,
       keywords: mergeUniqueStrings(candidate.keywords || [], candidate.wikiCategories || [], candidate.wikiLinks || [], candidate.keyword || candidate.text),
+      concepts: mergeUniqueStrings(candidate.concepts || [], candidate.keywords || [], candidate.wikiCategories || [], candidate.keyword || candidate.text),
+      semanticWeights: candidate.semanticWeights || {},
       wikiCategories: mergeUniqueStrings(candidate.wikiCategories || []),
       wikiLinks: mergeUniqueStrings(candidate.wikiLinks || []),
+      theoryResonanceScore: candidate.theoryResonanceScore ?? 0,
+      semanticDensity: candidate.semanticDensity ?? 0,
+      semanticSignature: candidate.semanticSignature || null,
+      semanticLabel: candidate.semanticLabel || candidate.title || candidate.keyword || candidate.text || null,
+      relationCandidates: Array.isArray(candidate.relationCandidates) ? candidate.relationCandidates : [],
     };
 
     state.nodes.push(node);
@@ -94,6 +101,11 @@ function mergeGraphNode(state, candidate) {
     ...candidate,
     id: existing.id || candidate.id,
     keywords: mergeUniqueStrings(existing.keywords || [], candidate.keywords || [], candidate.wikiCategories || [], candidate.wikiLinks || [], existing.keyword, existing.text),
+    concepts: mergeUniqueStrings(existing.concepts || [], candidate.concepts || [], candidate.keywords || [], candidate.wikiCategories || []),
+    semanticWeights: {
+      ...(existing.semanticWeights || {}),
+      ...(candidate.semanticWeights || {}),
+    },
     wikiCategories: mergeUniqueStrings(existing.wikiCategories || [], candidate.wikiCategories || []),
     wikiLinks: mergeUniqueStrings(existing.wikiLinks || [], candidate.wikiLinks || []),
     wikiSummary: candidate.wikiSummary || existing.wikiSummary || candidate.summary || existing.summary || "",
@@ -101,6 +113,11 @@ function mergeGraphNode(state, candidate) {
     category: candidate.category || existing.category,
     semanticGroup: candidate.semanticGroup || existing.semanticGroup,
     role: candidate.role || existing.role,
+    theoryResonanceScore: Math.max(existing.theoryResonanceScore || 0, candidate.theoryResonanceScore || 0),
+    semanticDensity: Math.max(existing.semanticDensity || 0, candidate.semanticDensity || 0),
+    semanticSignature: candidate.semanticSignature || existing.semanticSignature || null,
+    semanticLabel: candidate.semanticLabel || existing.semanticLabel || existing.title || candidate.title || candidate.keyword || null,
+    relationCandidates: Array.isArray(candidate.relationCandidates) && candidate.relationCandidates.length ? candidate.relationCandidates : (existing.relationCandidates || []),
     appearanceCount: (existing.appearanceCount || 1) + 1,
     lastSeenAt: now,
     firstSeenAt: existing.firstSeenAt || now,
@@ -116,7 +133,8 @@ function mergeGraphNode(state, candidate) {
 }
 
 function refreshGraphTopology(state) {
-  const { edges, categories } = refreshSemanticTopology(state, performance.now());
+  const { nodes, edges, categories } = refreshSemanticTopology(state, performance.now());
+  state.nodes = nodes;
   state.edges = edges;
   state.categories = categories;
 
@@ -372,6 +390,13 @@ export function createGraphActions(store) {
               phase: "transformation",
               category: nextTerm.semanticGroup || nextTerm.role || "raw",
               links: [],
+              concepts: mergeUniqueStrings(nextTerm.concepts || [], nextTerm.keywords || [], nextTerm.semanticGroup || nextTerm.role),
+              semanticWeights: nextTerm.semanticWeights || Object.fromEntries((nextTerm.keywords || []).map((keyword, keywordIndex) => [keyword, Number((1 - keywordIndex * 0.12).toFixed(3))])),
+              semanticLabel: nextTerm.semanticLabel || nextTerm.title || nextTerm.keyword || nextTerm.text,
+              semanticSignature: nextTerm.semanticSignature || null,
+              semanticDensity: nextTerm.semanticDensity ?? 0,
+              theoryResonanceScore: nextTerm.theoryResonanceScore ?? nextTerm.resonance ?? 0,
+              relationCandidates: Array.isArray(nextTerm.relationCandidates) ? nextTerm.relationCandidates : [],
               lane: Number.isInteger(nextTerm.preferredLane) ? nextTerm.preferredLane : 1,
               rowIndex: Number.isInteger(nextTerm.fragmentOrder) ? nextTerm.fragmentOrder : draft.nodes.length,
               x: draft.viewport.width * 0.12,

@@ -17,18 +17,23 @@ function buildRelationLookup(fragments, relations) {
 
     const leftLinks = lookup.get(relation.leftIndex) || [];
     const rightLinks = lookup.get(relation.rightIndex) || [];
+    const semanticStrength = relation.semanticStrength || relation.score || 1;
+
     const link = {
       targetIndex: relation.rightIndex,
       sourceIndex: relation.leftIndex,
       type: relation.type || "semantic",
       weight: relation.score || 1,
+      semanticStrength,
       progress: relation.progress ?? 1,
     };
+
     const reverseLink = {
       targetIndex: relation.leftIndex,
       sourceIndex: relation.rightIndex,
       type: relation.type || "semantic",
       weight: relation.score || 1,
+      semanticStrength,
       progress: relation.progress ?? 1,
     };
 
@@ -43,6 +48,49 @@ function buildRelationLookup(fragments, relations) {
   }
 
   return lookup;
+}
+
+function relationMass(fragment) {
+  if (!fragment) {
+    return 1;
+  }
+
+  const links = Array.isArray(fragment.links) ? fragment.links : [];
+  let totalStrength = 0;
+  let totalWeight = 0;
+
+  for (const link of links) {
+    totalStrength += Number(link.semanticStrength || link.weight || 0);
+    totalWeight += Number(link.weight || 0);
+  }
+
+  const semanticDensity = Number(fragment.semanticDensity || 0);
+  const resonance = Number(fragment.theoryResonanceScore || 0);
+  const base = Number(fragment.mass || fragment.clusterMass || fragment.weight || 1);
+
+  return clamp(base + semanticDensity * 0.9 + resonance * 1.2 + totalStrength * 0.08 + totalWeight * 0.03, 0.7, 4.8);
+}
+
+function updateSpatialBody(fragment, time, relationLoad, viewportWidth, viewportHeight) {
+  const ageFactor = Math.min(1, (fragment.age || 0) / 18);
+  const resonance = Number(fragment.theoryResonanceScore || 0);
+  const semanticDensity = Number(fragment.semanticDensity || 0);
+  const linkDensity = clamp(relationLoad / 8, 0, 1);
+  const gravity = clamp(resonance * 0.52 + semanticDensity * 0.34 + linkDensity * 0.28, 0, 1.4);
+  const depthTarget = clamp((fragment.depthLayer || 1) - resonance * 0.32 + semanticDensity * 0.24 - ageFactor * 0.18, 0, 2);
+
+  fragment.z = clamp((fragment.z ?? depthTarget) + (depthTarget - (fragment.z ?? depthTarget)) * 0.12 + gravity * 0.01, 0, 2);
+  fragment.sizeScale = clamp((fragment.sizeScale || 1) + (fragment.z - 1) * 0.08 + resonance * 0.05 + semanticDensity * 0.04, 0.72, 1.65);
+  fragment.foregroundBias = clamp((fragment.foregroundBias || 0.15) + resonance * 0.04 + semanticDensity * 0.03 - ageFactor * 0.02, 0, 0.55);
+  fragment.depthBlur = clamp(0.45 - fragment.z * 0.14 + (1 - semanticDensity) * 0.16, 0.03, 0.45);
+  fragment.atmosphericOpacity = clamp(0.28 + fragment.z * 0.28 + resonance * 0.2 + semanticDensity * 0.18, 0.22, 1);
+
+  const centerX = viewportWidth * 0.5;
+  const centerY = viewportHeight * 0.49;
+  const vortexX = centerX + Math.sin(time * 0.00018 + (fragment.sequenceIndex || 0)) * viewportWidth * 0.012;
+  const vortexY = centerY + Math.cos(time * 0.00016 + (fragment.sequenceIndex || 0) * 0.7) * viewportHeight * 0.014;
+  fragment.vx += (vortexX - fragment.x) * gravity * 0.00012;
+  fragment.vy += (vortexY - fragment.y) * gravity * 0.0001;
 }
 
 function estimateCollisionRadius(fragment) {
@@ -73,16 +121,17 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
   }
 
   const seconds = Math.min(0.05, Math.max(0.008, delta / 1000));
-  const centerX = width * 0.5;
-  const centerY = height * 0.52;
   const leftX = width * 0.14;
   const centerLaneX = width * 0.5;
   const rightX = width * 0.82;
+  const centerY = height * 0.52;
   const minDistance = Math.max(38, Math.min(width, height) * 0.06);
 
   buildRelationLookup(safeFragments, safeRelations);
 
-  for (const fragment of safeFragments) {
+  for (let index = 0; index < safeFragments.length; index += 1) {
+    const fragment = safeFragments[index];
+
     if (fragment.isTheoryCore) {
       const targetX = width * 0.5;
       const targetY = height * 0.46;
@@ -97,28 +146,33 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
       continue;
     }
 
-    const mass = clamp(fragment.mass || fragment.clusterMass || fragment.weight || 1, 0.8, 3.2);
+    const relationLoad = Array.isArray(fragment.links) ? fragment.links.length : 0;
+    const mass = relationMass(fragment);
     const ageFactor = Math.min(1, (fragment.age || 0) / 16);
     const depthLayer = fragment.depthLayer || 1;
     const zoneX = depthLayer === 0 ? leftX : depthLayer === 1 ? centerLaneX : rightX;
     const flowX = Number.isFinite(fragment.targetX) ? fragment.targetX : zoneX;
     const flowY = Number.isFinite(fragment.targetY) ? fragment.targetY : (fragment.spawnY ?? fragment.y ?? centerY);
     const ageBias = Math.min(1, (fragment.age || 0) / 10);
-    const targetX = flowX + (rightX - flowX) * ageBias * (depthLayer === 2 ? 0.18 : 0.44);
-    const targetY = flowY + Math.sin(time * 0.00035 + (fragment.driftPhase || 0)) * 2.2;
+    const semanticGravity = clamp((fragment.theoryResonanceScore || 0) * 0.56 + (fragment.semanticDensity || 0) * 0.32 + Math.min(1, relationLoad / 6) * 0.24, 0, 1.2);
+    const driftPhase = fragment.driftPhase || 0;
+    const targetX = flowX + (rightX - flowX) * ageBias * (depthLayer === 2 ? 0.16 : 0.38) + Math.sin(time * 0.00021 + driftPhase) * 8 * semanticGravity;
+    const targetY = flowY + Math.sin(time * 0.00035 + driftPhase) * (2.2 + semanticGravity * 1.8);
     const dx = targetX - fragment.x;
     const dy = targetY - fragment.y;
-    const spring = 0.0026 + (fragment.axisWeight || 0.5) * 0.0014;
-    const damping = 0.9 - ageFactor * 0.06;
+    const spring = 0.0021 + (fragment.axisWeight || 0.5) * 0.0011 + semanticGravity * 0.0012;
+    const damping = 0.906 - ageFactor * 0.055 - semanticGravity * 0.012;
 
     fragment.vx = (fragment.vx || 0) + (dx * spring) / mass;
     fragment.vy = (fragment.vy || 0) + (dy * spring * 0.9) / mass;
     fragment.vx *= damping;
     fragment.vy *= damping;
 
-    const flowPulse = 0.12 + ageBias * 0.18;
-    fragment.vx += flowPulse * (depthLayer === 0 ? 0.4 : depthLayer === 2 ? 0.08 : 0.2);
-    fragment.vy += Math.sin((time * 0.0004) + (fragment.sequenceIndex || 0)) * 0.0004;
+    const flowPulse = 0.11 + ageBias * 0.16 + semanticGravity * 0.06;
+    fragment.vx += flowPulse * (depthLayer === 0 ? 0.44 : depthLayer === 2 ? 0.08 : 0.18);
+    fragment.vy += Math.sin((time * 0.0004) + (fragment.sequenceIndex || 0)) * 0.00035;
+
+    updateSpatialBody(fragment, time, relationLoad, width, height);
   }
 
   for (const relation of safeRelations) {
@@ -131,10 +185,10 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
     const dx = right.x - left.x;
     const dy = right.y - left.y;
     const distance = Math.max(0.001, Math.hypot(dx, dy));
-    const relationStrength = Math.min(1.8, Math.max(0.6, relation.score || 1));
+    const relationStrength = Math.min(2.4, Math.max(0.45, relation.semanticStrength || relation.score || 1));
     const progress = relation.progress ?? 1;
-    const idealDistance = clamp(relation.type === "theory" ? 180 : relation.type === "wiki" ? 170 : 210 - relationStrength * 20, 82, 220);
-    const force = (distance - idealDistance) * 0.00058 * relationStrength * (0.55 + progress * 0.45);
+    const idealDistance = clamp(relation.type === "theory" ? 172 : relation.type === "wiki" ? 166 : 214 - relationStrength * 16, 68, 224);
+    const force = (distance - idealDistance) * 0.0005 * relationStrength * (0.52 + progress * 0.48);
     const nx = dx / distance;
     const ny = dy / distance;
 
@@ -142,6 +196,12 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
     left.vy += ny * force * 0.66;
     right.vx -= nx * force;
     right.vy -= ny * force * 0.66;
+
+    const curveBias = relationStrength * 0.00012;
+    left.vx += ny * curveBias;
+    left.vy -= nx * curveBias;
+    right.vx -= ny * curveBias;
+    right.vy += nx * curveBias;
   }
 
   for (let leftIndex = 0; leftIndex < safeFragments.length; leftIndex += 1) {
@@ -167,33 +227,42 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
       const sharedCluster = left.clusterKey === right.clusterKey;
       const depthGap = Math.abs((left.depthLayer || 1) - (right.depthLayer || 1));
       const overlap = (collisionDistance - distance) / collisionDistance;
-  const push = overlap * (sharedCluster ? 0.02 : 0.028) * (1 + depthGap * 0.18);
+      const push = overlap * (sharedCluster ? 0.018 : 0.024) * (1 + depthGap * 0.18);
       const nx = dx / distance;
       const ny = dy / distance;
       left.vx -= nx * push;
       left.vy -= ny * push;
       right.vx += nx * push;
       right.vy += ny * push;
+
+      if (sharedCluster) {
+        left.z = clamp((left.z || 1) + 0.004, 0, 2);
+        right.z = clamp((right.z || 1) + 0.004, 0, 2);
+      }
     }
   }
 
   for (const fragment of safeFragments) {
-    const mass = clamp(fragment.mass || fragment.clusterMass || fragment.weight || 1, 0.8, 3.2);
+    const mass = clamp(fragment.mass || fragment.clusterMass || fragment.weight || 1, 0.7, 4.4);
     const depthLayer = fragment.depthLayer || 1;
     const ageFactor = Math.min(1, (fragment.age || 0) / 16);
     const centeringX = depthLayer === 0 ? leftX : depthLayer === 1 ? centerLaneX : rightX;
     const centeringY = fragment.targetY ?? centerY;
-    fragment.vx += (centeringX - fragment.x) * 0.0007 / mass;
-    fragment.vy += (centeringY - fragment.y) * 0.00045 / mass;
+    const resonancePull = clamp((fragment.theoryResonanceScore || 0) * 0.34 + (fragment.semanticDensity || 0) * 0.26, 0, 0.9);
+
+    fragment.vx += ((centeringX - fragment.x) * (0.00058 + resonancePull * 0.00018)) / mass;
+    fragment.vy += ((centeringY - fragment.y) * (0.0004 + resonancePull * 0.00012)) / mass;
 
     fragment.x += fragment.vx * seconds * 60;
     fragment.y += fragment.vy * seconds * 60;
-    fragment.vx *= 0.981;
-    fragment.vy *= 0.981;
+    fragment.vx *= 0.977;
+    fragment.vy *= 0.977;
 
-    fragment.z = clamp((fragment.z ?? fragment.depthLayer ?? 1) + (fragment.foregroundBias || 0) * 0.0012 - seconds * 0.0008, 0, 2);
-    const fadeRate = depthLayer === 2 ? 0.0016 : depthLayer === 0 ? 0.0009 : 0.0011;
-    fragment.opacity = clamp((fragment.opacity || 1) - seconds * (fadeRate + ageFactor * 0.0006), 0.2, 1);
+    const layerBias = depthLayer === 0 ? 0.36 : depthLayer === 2 ? 1.62 : 0.98;
+    fragment.z = clamp((fragment.z ?? fragment.depthLayer ?? 1) + (fragment.foregroundBias || 0) * 0.0012 + resonancePull * 0.008 - seconds * 0.00045 * layerBias, 0, 2);
+    const fadeRate = depthLayer === 2 ? 0.00145 : depthLayer === 0 ? 0.00082 : 0.00105;
+    fragment.opacity = clamp((fragment.opacity || 1) - seconds * (fadeRate + ageFactor * 0.00055) + resonancePull * 0.0008, 0.18, 1);
+    fragment.atmosphericOpacity = clamp((fragment.atmosphericOpacity || fragment.opacity || 1) * 0.995 + fragment.opacity * 0.005, 0.16, 1);
 
     fragment.x = clamp(fragment.x, 28, width - 28);
     fragment.y = clamp(fragment.y, 42, height - 28);
