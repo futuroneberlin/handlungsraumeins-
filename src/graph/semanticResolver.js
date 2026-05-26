@@ -1,5 +1,5 @@
 import { createEmergentCategories, createSemanticEdges, updateRelationLayer } from "../../core/relations.js";
-import { THEORY_CORE_TEXT, synthesizeConceptualStatement, theoryResonanceProfile, stabilizeTheoryStatement } from "../../core/theoryModel.js";
+import { THEORY_CORE_TEXT, synthesizeConceptualStatement, theoryResonanceProfile, stabilizeTheoryStatement, evaluateTheoryResonance, evaluateNodeTheoryResonance } from "../../core/theoryModel.js";
 
 export function refreshSemanticTopology(state, timestamp = performance.now()) {
   const nodes = Array.isArray(state.nodes) ? state.nodes : [];
@@ -79,6 +79,7 @@ export function getNodeSummary(node, state) {
   }
 
   const resonance = theoryResonanceProfile(node);
+  const ontology = evaluateNodeTheoryResonance(node, { minScore: 1.7 });
   const conceptSignals = collectConceptSignals(node);
 
   const matchedWiki = (state?.wikiEntries || []).find((entry) => {
@@ -104,6 +105,7 @@ export function getNodeSummary(node, state) {
     ...conceptSignals,
     ...sourceSignals,
     ...resonance.resonanceTerms,
+    ...(ontology.activatedDimensions || []),
   ], resonance.statement);
 }
 
@@ -187,7 +189,25 @@ export function getTheoryStabilizationEntries(state) {
       ...linkedNodes.flatMap((node) => node.concepts || []),
     ], "Meaning stabilizes through theory-guided spatial transformation.");
 
-    const explanation = `${stabilizationStatement} Die Verdichtung entsteht aus wiederholter semantischer Verstärkung und räumlicher Stabilisierung im Transformationsfeld.`;
+    const ontology = evaluateTheoryResonance([
+      conceptName,
+      ...(category.concepts || []),
+      ...linkedNodes.flatMap((node) => node.concepts || []),
+      ...linkedNodes.flatMap((node) => node.semanticExcerpt || node.text || ""),
+    ], { minScore: 2.1 });
+
+    if (ontology.reject) {
+      return null;
+    }
+
+    const dimensions = ontology.activatedDimensions.slice(0, 3);
+    const why = dimensions.length
+      ? `Warum stabilisiert: ${dimensions.join(" + ")}.`
+      : "Warum stabilisiert: wiederholte relationale Aktivierung im Theorie-Feld.";
+    const transformed = "Transformation: Fragmentmaterial wurde aus deskriptiver Sprache in eine prozessuale Handlungsstruktur überführt.";
+    const condition = "Skulpturale Bedingung: ein relationales Erfahrungsfeld mit zeitlicher Verdichtung und kollektiver Aktivierung.";
+
+    const explanation = `${stabilizationStatement} ${why} ${transformed} ${condition}`;
 
     let mapping = "Mapped to Actional Space: participation as structure and temporal emergence of form.";
     const lower = stabilizationStatement.toLowerCase();
@@ -206,9 +226,9 @@ export function getTheoryStabilizationEntries(state) {
       conceptName,
       explanation,
       linkedFragments: linkedNodes.map((node) => node.semanticLabel || node.title || node.keyword || node.text).filter(Boolean),
-      mapping,
+      mapping: `${mapping} Theory Relation: ${dimensions.join(" + ") || "Participation + Interaction + Transformation"}`,
     };
-  }).filter((entry) => entry.linkedFragments.length >= 2);
+  }).filter(Boolean).filter((entry) => entry.linkedFragments.length >= 2);
 }
 
 export function updateSemanticLayers(state, timestamp = performance.now()) {

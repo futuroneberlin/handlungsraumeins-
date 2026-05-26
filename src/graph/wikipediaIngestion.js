@@ -1,7 +1,7 @@
 import { fetchWikipediaEntry } from "../../modules/wikipedia.js";
 import { mergeUniqueStrings, nodeIdentity } from "./graphState.js";
 import { createSemanticFragment, createConceptExcerpt, extractKeywords } from "../../modules/textFragmenter.js";
-import { curateSemanticSignals } from "../../core/theoryModel.js";
+import { curateSemanticSignals, evaluateTheoryResonance } from "../../core/theoryModel.js";
 
 export function buildFeedEntries(corpus) {
   return (Array.isArray(corpus) ? corpus : []).flatMap((entry) => {
@@ -14,22 +14,35 @@ export function buildFeedEntries(corpus) {
 
     return fragments.map((part) => {
       const fragment = createSemanticFragment(part, { source: entry.source || "theory", excerptWords: 16, keywordLimit: 4 });
-      const curated = curateSemanticSignals([
-        fragment.title,
+      const evaluation = evaluateTheoryResonance([
+        entry.title,
         fragment.excerpt,
         ...(fragment.keywords || []),
-      ], { minScore: 1.02 });
+      ], { minScore: 1.95 });
+      if (evaluation.reject) {
+        return null;
+      }
+
+      const curated = curateSemanticSignals([
+        entry.title,
+        fragment.excerpt,
+        ...(fragment.keywords || []),
+      ], { minScore: 1.12 });
       if (!curated.length) {
         return null;
       }
 
+      const concepts = [...new Set(curated.map((item) => item.signal))].slice(0, 4);
+
       return {
         ...fragment,
-        title: curated[0]?.signal || fragment.title,
+        title: entry.title || fragment.title,
         text: fragment.excerpt,
         excerpt: fragment.excerpt,
-        concept: curated[0]?.signal || fragment.concept,
-        theoryRelevance: Number(curated[0]?.score || 0),
+        concept: concepts[0] || fragment.concept,
+        concepts,
+        theoryRelevance: Number(evaluation.score || 0),
+        activatedDimensions: evaluation.activatedDimensions || [],
         age: 0,
         opacity: 0.92,
         y: 0,
@@ -40,14 +53,16 @@ export function buildFeedEntries(corpus) {
     source: entry.source || "theory",
     title: entry.title || entry.source || "Fragment",
     excerpt: entry.excerpt || entry.text || "",
-    keywords: entry.keywords || [],
+    keywords: entry.concepts || entry.keywords || [],
     concept: entry.concept || entry.title || entry.source || "Fragment",
+    concepts: entry.concepts || [],
     text: entry.excerpt || entry.text || "",
     theoryRelevance: Number(entry.theoryRelevance || 0),
+    activatedDimensions: entry.activatedDimensions || [],
     age: 0,
     opacity: 0.92,
     y: 0,
-  })).filter((entry) => entry.theoryRelevance >= 1.02);
+  })).filter((entry) => entry.theoryRelevance >= 1.95);
 }
 
 export function createWikipediaNode(entry, viewport, existingCount = 0) {
@@ -70,6 +85,11 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
   const curatedConcepts = Array.isArray(entry.curated)
     ? entry.curated.map((item) => item.signal).slice(0, 8)
     : conceptKeywords.slice(0, 8);
+  const evaluation = evaluateTheoryResonance([
+    title,
+    summaryExcerpt,
+    ...curatedConcepts,
+  ], { minScore: 1.95 });
   const resonanceScore = Number(entry.resonanceScore || 0);
   const relevance = 1 + Math.min(1.2, categories.length * 0.08 + links.length * 0.01);
 
@@ -90,7 +110,9 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
     semanticWeights: Object.fromEntries(curatedConcepts.slice(0, 6).map((keyword, index) => [keyword, Number((1.08 - index * 0.11).toFixed(3))])),
     semanticLabel: curatedConcepts[0] || title,
     semanticSignature: `${String(title).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}`,
-    theoryResonanceScore: Math.min(1, 0.36 + resonanceScore * 0.28 + categories.length * 0.03),
+    theoryResonanceScore: Math.min(1, 0.28 + resonanceScore * 0.24 + Math.min(0.64, evaluation.score * 0.18)),
+    theoryDimensions: evaluation.activatedDimensions,
+    theoryValidationScore: evaluation.score,
     semanticDensity: Math.min(1, curatedConcepts.length / 6),
     relationCandidates: [],
     abstract: summaryExcerpt,

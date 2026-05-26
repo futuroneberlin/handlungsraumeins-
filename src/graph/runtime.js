@@ -1,7 +1,7 @@
 import { createFoundationState } from "../../core/layout.js";
 import { extractFoundationTerms } from "../../modules/semanticExtractor.js";
 import { loadTheoryCorpus } from "../../modules/theoryLoader.js";
-import { curateSemanticSignals } from "../../core/theoryModel.js";
+import { curateSemanticSignals, evaluateTheoryResonance, evaluateNodeTheoryResonance } from "../../core/theoryModel.js";
 import { ensureTheoryCoreNode, mergeUniqueStrings, scheduleGraphStateSave } from "./graphState.js";
 import { buildFeedEntries, collectExpansionTopics, loadWikipediaPulse } from "./wikipediaIngestion.js";
 import { refreshCategories } from "./categoryEngine.js";
@@ -302,13 +302,24 @@ function trimNodeField(state) {
 
 function createCuratedIngestionItem(entry) {
   const sourceSummary = String(entry?.summary || entry?.excerpt || entry?.title || "").trim();
+  const evaluation = evaluateTheoryResonance([
+    entry?.title,
+    sourceSummary,
+    ...(entry?.concepts || []),
+    ...(entry?.categories || []),
+    ...(entry?.links || []),
+  ], { minScore: 1.95 });
+  if (evaluation.reject) {
+    return null;
+  }
+
   const curatedSignals = curateSemanticSignals([
     entry?.title,
     ...(entry?.concepts || []),
     ...(entry?.categories || []),
     ...(entry?.links || []),
     sourceSummary,
-  ], { minScore: 1.08 });
+  ], { minScore: 1.18 });
   if (!curatedSignals.length) {
     return null;
   }
@@ -323,7 +334,7 @@ function createCuratedIngestionItem(entry) {
     id: `ingestion-${normalizeKey(entry?.title || entry?.term || Date.now())}-${Date.now()}`,
     nodeId: null,
     source: "Wikipedia",
-    title: tags[0] || entry?.title || entry?.term || "Fragment",
+    title: entry?.title || entry?.term || "Fragment",
     text: cleanedExcerpt,
     excerpt: cleanedExcerpt,
     rawText: entry?.summary || entry?.excerpt || entry?.title || "",
@@ -336,7 +347,9 @@ function createCuratedIngestionItem(entry) {
     wikiLinks: [],
     wikiSummary: cleanedExcerpt,
     wikiUrl: entry?.url || "",
-    theoryRelevance: Number(curatedSignals[0]?.score || 0),
+    concepts: tags,
+    activatedDimensions: evaluation.activatedDimensions || [],
+    theoryRelevance: Number(evaluation.score || 0),
     phase: "ingestion",
     age: 0,
     opacity: 0.88,
@@ -528,7 +541,7 @@ export function createGraphActions(store) {
 
         if (now >= draft.nextFeedAt && draft.ingestionQueue.length) {
           const nextLine = draft.ingestionQueue.shift();
-          if (nextLine && Number(nextLine.theoryRelevance || 0) >= 1.08) {
+          if (nextLine && Number(nextLine.theoryRelevance || 0) >= 1.95) {
             draft.feedLines.push({
               ...nextLine,
               y: draft.viewport.height - 52,
@@ -561,6 +574,17 @@ export function createGraphActions(store) {
             if (!normalized || draft.termKeys.has(normalized)) {
               continue;
             }
+            const termValidation = evaluateTheoryResonance([
+              term.title,
+              term.text,
+              ...(term.concepts || []),
+              ...(term.keywords || []),
+              term.semanticGroup,
+              term.role,
+            ], { minScore: 1.85 });
+            if (termValidation.reject) {
+              continue;
+            }
             if ((term.theoryResonanceScore || 0) < 0.54 || (term.semanticDensity || 0) < 0.26) {
               continue;
             }
@@ -576,6 +600,8 @@ export function createGraphActions(store) {
               text: String(term.excerpt || term.text || term.keyword || normalized),
               excerpt: term.excerpt || term.text || term.keyword || normalized,
               source: term.source || "theorie",
+              activatedDimensions: termValidation.activatedDimensions,
+              theoryValidationScore: termValidation.score,
               age: 0,
               opacity: term.opacity ?? 0.92,
               memoryOpacity: term.memoryOpacity ?? 0.72,
@@ -599,6 +625,7 @@ export function createGraphActions(store) {
               condensedTarget.phase = (condensedTarget.theoryResonanceScore || 0) + (condensedTarget.semanticDensity || 0) > 1.14 ? "stabilization" : "formation";
               condensedTarget.lastSeenAt = performance.now();
               condensedTarget.appearanceCount = (condensedTarget.appearanceCount || 1) + 1;
+              condensedTarget.theoryDimensions = mergeUniqueStrings(condensedTarget.theoryDimensions || [], nextTerm.activatedDimensions || []);
             } else {
               draft.nodes.push({
               ...nextTerm,
@@ -612,6 +639,7 @@ export function createGraphActions(store) {
               semanticSignature: nextTerm.semanticSignature || null,
               semanticDensity: nextTerm.semanticDensity ?? 0,
               theoryResonanceScore: nextTerm.theoryResonanceScore ?? nextTerm.resonance ?? 0,
+              theoryDimensions: nextTerm.activatedDimensions || [],
               relationCandidates: Array.isArray(nextTerm.relationCandidates) ? nextTerm.relationCandidates : [],
               lane: Number.isInteger(nextTerm.preferredLane) ? nextTerm.preferredLane : 1,
               rowIndex: Number.isInteger(nextTerm.fragmentOrder) ? nextTerm.fragmentOrder : draft.nodes.length,
@@ -666,6 +694,10 @@ export function createGraphActions(store) {
           }
 
           fragment.age = (fragment.age || 0) + delta / 1000;
+          const resonance = evaluateNodeTheoryResonance(fragment, { minScore: 1.7 });
+          fragment.theoryValidationScore = resonance.score;
+          fragment.theoryDimensions = resonance.activatedDimensions;
+
           if ((fragment.age || 0) < 6) {
             fragment.phase = "formation";
           } else if ((fragment.theoryResonanceScore || 0) + (fragment.semanticDensity || 0) >= 1.1) {
@@ -673,7 +705,22 @@ export function createGraphActions(store) {
           } else {
             fragment.phase = "transformation";
           }
+
+          if (resonance.reject && (fragment.age || 0) > 14) {
+            fragment.opacity = clamp((fragment.opacity ?? 0.8) - 0.04, 0.08, 1);
+            fragment.memoryOpacity = clamp((fragment.memoryOpacity ?? 0.7) - 0.04, 0.08, 1);
+          }
         }
+
+        draft.nodes = draft.nodes.filter((node) => {
+          if (isAnchorNode(node)) {
+            return true;
+          }
+          if ((node.age || 0) < 18) {
+            return true;
+          }
+          return (node.theoryValidationScore || 0) >= 1.5 || (node.opacity ?? 0.5) > 0.18;
+        });
 
         if (now >= draft.nextRelationAt) {
           refreshGraphTopology(draft);

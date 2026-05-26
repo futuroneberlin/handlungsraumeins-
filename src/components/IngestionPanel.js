@@ -14,16 +14,16 @@ function clampSentences(text, maxSentences = 3) {
 export function IngestionPanel({ queue = [], feedLines = [], selectedNodeId, onNodeSelect, className = "", style, ...rest }) {
   const activeItems = [
     ...queue
-      .filter((item) => Number(item.theoryRelevance || 0) >= 1.08)
+      .filter((item) => Number(item.theoryRelevance || 0) >= 1.95)
       .slice(0, 4)
       .map((item) => ({
-        title: item.concept || item.title || "Curated fragment",
+        title: item.title || "Curated fragment",
         text: clampSentences(item.excerpt || item.text || item.rawText || "", 3),
-        meta: "theory-filtered semantic fragment",
+        meta: (item.concepts || item.keywords || []).slice(0, 4).join(" · ") || "theory-filtered semantic fragment",
         nodeId: item.nodeId || item.id || null,
       })),
     ...feedLines
-      .filter((line) => Number(line.theoryRelevance || 0) >= 1.08)
+      .filter((line) => Number(line.theoryRelevance || 0) >= 1.95)
       .slice(-3)
       .map((line) => ({
         title: line.concept || line.title || "Semantic stream",

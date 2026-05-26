@@ -2,6 +2,13 @@ export const THEORY_CORE_TITLE = "Actional Space of Aesthetic Practice";
 
 export const THEORY_CORE_TEXT = "The Actional Space of Aesthetic Practice is an internal conceptual framework for sculptural knowledge, where action, participation, temporality, and spatial transformation shape meaning.";
 
+export const THEORY_FOUNDATIONAL_MODEL = [
+  "The Actional Space of Aesthetic Practice is an expanded sculptural environment in which the artwork loses its fixed object identity and dissolves into a living process.",
+  "This space is constituted through action, interaction, temporality, participation, spatial transformation, and relational experience.",
+  "The artwork is no longer a static object, but an experiential field generated through participation itself.",
+  "Meaning does not emerge from isolated representation, but from lived relational activation.",
+].join(" ");
+
 export const THEORY_CORE_KEYWORDS = [
   "participation",
   "transformation",
@@ -35,6 +42,43 @@ export const THEORY_CORE_CONSTELLATION = [
   "Movement",
   "Spatial Tension",
   "Social Sculpture",
+];
+
+export const THEORY_VALIDATION_DIMENSIONS = [
+  { id: "participation", label: "Participation as Structure", terms: ["participation", "participatory", "collective participation", "co-creation"], weight: 1.35 },
+  { id: "interaction", label: "Interaction as Meaning Production", terms: ["interaction", "interactivity", "exchange", "dialogic"], weight: 1.28 },
+  { id: "temporality", label: "Temporality as Artistic Condition", terms: ["temporality", "time", "duration", "unfolding", "sequence"], weight: 1.32 },
+  { id: "transformation", label: "Relational Transformation", terms: ["transformation", "becoming", "conversion", "shift", "metamorph"], weight: 1.34 },
+  { id: "spatial-practice", label: "Spatial Activation", terms: ["spatial", "space", "site", "field", "activation"], weight: 1.16 },
+  { id: "embodied-action", label: "Embodied Action", terms: ["embodied", "body", "gesture", "movement", "action"], weight: 1.22 },
+  { id: "process", label: "Process over Object", terms: ["process", "processual", "ongoing", "dynamic", "formation"], weight: 1.2 },
+  { id: "relation", label: "Relational Experience", terms: ["relation", "relational", "collective", "community", "shared experience"], weight: 1.24 },
+  { id: "collective-experience", label: "Collective Experience", terms: ["collective experience", "shared", "participants", "co-presence"], weight: 1.18 },
+  { id: "volume-to-body", label: "From Volume to Body / Action", terms: ["volume to body", "body / action", "embodied movement", "gesture"], weight: 1.1 },
+  { id: "object-to-time", label: "From Static Object to Time / Interaction", terms: ["static object", "time / interaction", "temporal process", "unfolding interaction"], weight: 1.12 },
+  { id: "authorship-to-collective", label: "From Isolated Authorship to Collective Production", terms: ["collective production", "co-authored", "co-created", "shared authorship"], weight: 1.08 },
+  { id: "object-to-relational-field", label: "From Material Object to Relational Field", terms: ["relational field", "field condition", "relation as material"], weight: 1.08 },
+];
+
+const LOW_RESONANCE_PATTERNS = [
+  "is the study of",
+  "is a",
+  "refers to",
+  "born",
+  "died",
+  "located in",
+  "category:",
+  "citation",
+  "template",
+  "infobox",
+  "metadata",
+];
+
+const TRANSFORMATION_PAIRS = [
+  { from: ["volume", "mass", "object"], to: ["body", "action", "embodied"] },
+  { from: ["static", "artifact", "fixed"], to: ["time", "interaction", "process"] },
+  { from: ["author", "individual", "isolated"], to: ["collective", "participants", "shared"] },
+  { from: ["material", "thing"], to: ["relational", "field", "experience"] },
 ];
 
 export const THEORY_STABILIZATION_PATTERNS = [
@@ -105,6 +149,104 @@ function uniqueNormalized(values = []) {
     .flat()
     .map(normalize)
     .filter(Boolean))];
+}
+
+function includesAnyTerm(signal, terms = []) {
+  const normalizedSignal = normalize(signal);
+  return terms.some((term) => {
+    const normalizedTerm = normalize(term);
+    return normalizedSignal.includes(normalizedTerm) || normalizedTerm.includes(normalizedSignal);
+  });
+}
+
+function collectOntologySignals(values = []) {
+  return uniqueNormalized(values)
+    .flatMap((value) => value.split(/[|,;]+/).map((part) => normalize(part)).filter(Boolean));
+}
+
+function transformationEvidence(signals = []) {
+  let score = 0;
+  const evidence = [];
+
+  for (const pair of TRANSFORMATION_PAIRS) {
+    const fromMatch = signals.some((signal) => includesAnyTerm(signal, pair.from));
+    const toMatch = signals.some((signal) => includesAnyTerm(signal, pair.to));
+    if (fromMatch && toMatch) {
+      score += 0.42;
+      evidence.push(`${pair.from[0]} -> ${pair.to[0]}`);
+    }
+  }
+
+  return { score, evidence };
+}
+
+export function evaluateTheoryResonance(values = [], options = {}) {
+  const minScore = Number.isFinite(options.minScore) ? options.minScore : 1.8;
+  const signals = collectOntologySignals(values);
+  const dimensions = [];
+  let score = 0;
+
+  for (const dimension of THEORY_VALIDATION_DIMENSIONS) {
+    const hits = signals.filter((signal) => includesAnyTerm(signal, dimension.terms));
+    if (!hits.length) {
+      continue;
+    }
+
+    const dimensionScore = dimension.weight + Math.min(0.5, (hits.length - 1) * 0.12);
+    score += dimensionScore;
+    dimensions.push({
+      id: dimension.id,
+      label: dimension.label,
+      score: Number(dimensionScore.toFixed(3)),
+      evidence: [...new Set(hits)].slice(0, 3),
+    });
+  }
+
+  const transformation = transformationEvidence(signals);
+  score += transformation.score;
+
+  const lowSignals = signals.filter((signal) => LOW_RESONANCE_PATTERNS.some((pattern) => signal.includes(pattern)));
+  const noisePenalty = Math.min(1.25, lowSignals.length * 0.24);
+  score -= noisePenalty;
+
+  const dimensionBonus = dimensions.length >= 3 ? 0.35 : dimensions.length >= 2 ? 0.18 : 0;
+  score += dimensionBonus;
+
+  const normalizedScore = Number(Math.max(0, Math.min(4, score)).toFixed(3));
+  const activatedDimensions = dimensions
+    .sort((left, right) => right.score - left.score)
+    .map((dimension) => dimension.label);
+
+  return {
+    score: normalizedScore,
+    highResonance: normalizedScore >= minScore,
+    reject: normalizedScore < minScore,
+    dimensions,
+    activatedDimensions,
+    transformationEvidence: transformation.evidence,
+    lowResonanceReasons: lowSignals.slice(0, 3),
+  };
+}
+
+export function evaluateNodeTheoryResonance(node, options = {}) {
+  if (!node) {
+    return evaluateTheoryResonance([], options);
+  }
+
+  return evaluateTheoryResonance([
+    ...(node.concepts || []),
+    ...(node.keywords || []),
+    ...(node.wikiCategories || []),
+    ...(node.wikiLinks || []),
+    node.semanticLabel,
+    node.semanticExcerpt,
+    node.title,
+    node.text,
+    node.wikiSummary,
+    node.abstract,
+    node.category,
+    node.semanticGroup,
+  ], options);
 }
 
 export function curateSemanticSignals(signals = [], options = {}) {
