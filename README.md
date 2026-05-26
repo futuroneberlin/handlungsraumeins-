@@ -30,7 +30,7 @@ archivisch
 
 2. SEMANTISCHE EXTRAKTION
 
-Aus dem Theoriefluss werden nicht Wörter, sondern Bedeutungsfelder gebildet:
+Aus dem Theoriefluss werden Bedeutungsfelder gebildet:
 
 Raum
 Handlung
@@ -41,16 +41,12 @@ Struktur
 Relation
 soziale Plastik
 
-Diese Begriffe sind keine Tokens, sondern tragende Konzepte.3. FUNDAMENT (MITTE)
+Diese Begriffe sind tragende Konzepte. für 
 
-Die extrahierten Begriffe werden zu einem räumlichen Fundament.
+3. FUNDAMENT (MITTE)
 
-ziegelsteinartig
-schichtweise
-langsam
-stabil
-
-Jeder Begriff wird als räumliches Objekt gesetzt und bleibt Teil einer wachsenden Struktur.
+Die extrahierten Begriffe werden in Anlehnung an die Daten / Ingestion an Actional Space of Aesthetic Practice ausgewertet und in verbindung gesetzt.
+Jeder Begriff wird als Teil des  räumliches Objekt gesetzt und bleibt Teil einer wachsenden Struktur.
 
 Das Fundament ist eine sprachliche Architektur.
 
@@ -106,9 +102,7 @@ langsamer Aufbau
 Phase 4 — RELATIONEN
 externe Sätze (Wikipedia / Internet)
 verbinden Begriffe
-bleiben temporär
+
 ZIEL
-
 Der Nutzer soll beobachten können:
-
 wie theoretische Sprache sich in räumliche Architektur verwandelt
