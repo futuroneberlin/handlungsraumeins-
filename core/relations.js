@@ -94,8 +94,8 @@ function relationScore(left, right) {
     ...sharedKeywords,
     left.semanticLabel,
     right.semanticLabel,
-  ], { minScore: 2.15 });
-  const theoryBoost = Math.min(2.6, (theoryLeft + theoryRight) * 0.26 + theoryCoreOverlap.length * 0.62 + Math.min(0.9, pairResonance.score * 0.22));
+  ], { minScore: 1.65 });
+  const theoryBoost = Math.min(2.6, (theoryLeft + theoryRight) * 0.26 + theoryCoreOverlap.length * 0.62 + Math.min(1.1, pairResonance.score * 0.28));
   const repetitionScore = Math.min(1.2, Math.min(left.appearanceCount || 1, right.appearanceCount || 1) * 0.12);
   const conceptScore = Math.min(2.8, sharedConceptWeight(leftVector, rightVector, sharedConcepts) * 0.74 + sharedConcepts.length * 0.34);
   const semanticSimilarity = Math.min(3.2, conceptScore + sharedScore * 0.34 + tokenScore * 0.22 + categoryScore * 0.12 + linkScore * 0.05);
@@ -447,7 +447,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
         continue;
       }
 
-      if (semanticStrength < 1.45 || adjustedScore < 1.9 || contextualProximity < 0.74 || overlapStrength < 1.3 || reinforcementScore < 0.42) {
+      if (semanticStrength < 1.05 || adjustedScore < 1.25 || contextualProximity < 0.52 || reinforcementScore < 0.2) {
         continue;
       }
 
@@ -455,7 +455,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
         continue;
       }
 
-      if (!theoryDriven && sharedConcepts.length === 0) {
+      if (!theoryDriven && sharedConcepts.length === 0 && pairResonance.score < 2.1) {
         continue;
       }
 
@@ -515,7 +515,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
   return uniqueBy(edges, (edge) => edge.id)
     .filter((relation) => relation.leftIndex >= 0 && relation.rightIndex >= 0)
     .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(10, Math.ceil(safeNodes.length * 0.66)));
+    .slice(0, Math.max(12, Math.ceil(safeNodes.length * 0.85)));
 }
 
 export function createEmergentCategories(nodes, edges = [], timestamp = now()) {

@@ -110,11 +110,17 @@ function projectNodeDepth(node, width, height) {
   const maxDistance = Math.max(120, Math.hypot(centerX, centerY));
   const distance = Math.hypot((node.x || centerX) - centerX, (node.y || centerY) - centerY);
   const distanceRatio = clamp(distance / maxDistance, 0, 1);
-  const depthScale = clamp(1.1 - distanceRatio * 0.32 + (node.z != null ? (1 - node.z) * 0.05 : 0), 0.78, 1.2);
+  const zValue = Number.isFinite(node.z) ? node.z : 1;
+  const activity = Number.isFinite(node.semanticActivity) ? node.semanticActivity : 0;
+  const depthScale = clamp(1.18 - distanceRatio * 0.24 + (1.15 - zValue) * 0.18 + activity * 0.04, 0.72, 1.32);
+  const depthLift = Math.round((1.15 - zValue) * 18 + activity * 6 - distanceRatio * 10);
+  const depthBlur = clamp(0.44 + distanceRatio * 0.18 + Math.max(0, zValue - 1) * 0.1 - activity * 0.08, 0.02, 0.52);
 
   return {
     depthScale,
     distanceRatio,
+    depthLift,
+    depthBlur,
   };
 }
 
@@ -242,18 +248,20 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     const projectedNodes = nodes
       .map((node) => {
         const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
-        const { depthScale, distanceRatio } = projectNodeDepth(node, width, height);
+        const { depthScale, distanceRatio, depthLift, depthBlur } = projectNodeDepth(node, width, height);
         const baseOpacity = clamp(node.atmosphericOpacity ?? node.opacity ?? 0.82, 0.2, 1);
 
         return {
           ...node,
           depthScale,
           distanceRatio,
+          depthLift,
+          depthBlur,
           semanticActivity: activity,
-          renderOpacity: clamp(baseOpacity * (0.46 + activity * 0.54), 0.22, 1),
+          renderOpacity: clamp(baseOpacity * (0.38 + activity * 0.62) * (1.02 - Math.min(0.22, Math.max(0, node.z ?? 1) * 0.06)), 0.16, 1),
         };
       })
-      .sort((left, right) => right.distanceRatio - left.distanceRatio);
+      .sort((left, right) => (right.z ?? 0) - (left.z ?? 0) || right.distanceRatio - left.distanceRatio);
 
     const projectedById = new Map(projectedNodes.map((node) => [node.id, node]));
     const projectedLinks = links
@@ -356,7 +364,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         "g",
         {
           key: node.id,
-          transform: `translate(${node.x}, ${node.y}) scale(${node.depthScale})`,
+          transform: `translate(${node.x}, ${node.y + node.depthLift}) scale(${node.depthScale})`,
           opacity: node.renderOpacity,
           onClick: (event) => {
             event.stopPropagation();
@@ -383,7 +391,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
             style: {
               overflow: "visible",
               pointerEvents: "auto",
-              filter: `blur(${clamp(node.depthBlur ?? 0.12, 0.02, 0.42)}px) saturate(${clamp(0.92 + (node.z ?? 1) * 0.08, 0.92, 1.12)})`,
+                filter: `blur(${clamp(node.depthBlur ?? 0.12, 0.02, 0.42)}px) saturate(${clamp(0.9 + (node.z ?? 1) * 0.1, 0.88, 1.14)})`,
             },
           },
           createElement(
