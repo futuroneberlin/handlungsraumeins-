@@ -1,6 +1,7 @@
 import { createFoundationState } from "../../core/layout.js";
 import { extractFoundationTerms } from "../../modules/semanticExtractor.js";
 import { loadTheoryCorpus } from "../../modules/theoryLoader.js";
+import { curateSemanticSignals } from "../../core/theoryModel.js";
 import { ensureTheoryCoreNode, mergeUniqueStrings, scheduleGraphStateSave } from "./graphState.js";
 import { buildFeedEntries, collectExpansionTopics, loadWikipediaPulse } from "./wikipediaIngestion.js";
 import { refreshCategories } from "./categoryEngine.js";
@@ -21,7 +22,7 @@ const WIKI_TOPICS = [
 const MAX_FEED_LINES = 24;
 const MAX_QUEUE_ITEMS = 24;
 const MAX_TRANSFORMATION_QUEUE = 12;
-const MAX_NODES = 22;
+const MAX_NODES = 18;
 const MAX_WIKI_ENTRIES = 3;
 const FEED_INTERVAL = 980;
 const EXTRACTION_INTERVAL = 5200;
@@ -29,6 +30,15 @@ const RELATION_INTERVAL = 5600;
 const WIKI_INTERVAL = 18000;
 const MIN_WIKI_RESONANCE = 1.15;
 const THEORY_CORE_ID = "theory-core-actional-space";
+const THEORY_ATTRACTORS = [
+  { id: "theory-attractor-participation", label: "Participation", group: "Gesellschaft", xFactor: 0.34, yFactor: 0.3 },
+  { id: "theory-attractor-temporality", label: "Temporality", group: "Handlung", xFactor: 0.5, yFactor: 0.24 },
+  { id: "theory-attractor-spatial-transformation", label: "Spatial Transformation", group: "Raum", xFactor: 0.66, yFactor: 0.3 },
+  { id: "theory-attractor-embodied-action", label: "Embodied Action", group: "Handlung", xFactor: 0.29, yFactor: 0.52 },
+  { id: "theory-attractor-collective-experience", label: "Collective Experience", group: "Gesellschaft", xFactor: 0.71, yFactor: 0.52 },
+  { id: "theory-attractor-processual-form", label: "Processual Form", group: "Konstruktion", xFactor: 0.39, yFactor: 0.72 },
+  { id: "theory-attractor-relational-construction", label: "Relational Construction", group: "Kunst", xFactor: 0.61, yFactor: 0.72 },
+];
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -92,6 +102,102 @@ function uniqueRelevantTags(values = [], max = 5) {
     }
   }
   return tags;
+}
+
+function isAnchorNode(node) {
+  return node?.id === THEORY_CORE_ID || node?.isTheoryAttractor;
+}
+
+function scoreOverlap(leftValues = [], rightValues = []) {
+  const right = new Set((rightValues || []).map((value) => normalizeKey(value)).filter(Boolean));
+  return (leftValues || []).filter((value) => right.has(normalizeKey(value))).length;
+}
+
+function findCondensationTarget(state, candidate) {
+  const candidateLabel = normalizeKey(candidate.semanticLabel || candidate.title || candidate.keyword || candidate.text || "");
+  const candidateConcepts = candidate.concepts || candidate.keywords || [];
+  let best = null;
+  let bestScore = 0;
+
+  for (const node of state.nodes || []) {
+    if (!node || isAnchorNode(node)) {
+      continue;
+    }
+
+    const nodeLabel = normalizeKey(node.semanticLabel || node.title || node.keyword || node.text || "");
+    const sharedConcepts = scoreOverlap(candidateConcepts, node.concepts || node.keywords || []);
+    const labelMatch = candidateLabel && nodeLabel && (candidateLabel === nodeLabel || candidateLabel.includes(nodeLabel) || nodeLabel.includes(candidateLabel));
+    const score = sharedConcepts * 1.2 + (labelMatch ? 2.4 : 0) + Math.min(node.theoryResonanceScore || 0, candidate.theoryResonanceScore || 0);
+
+    if (score > bestScore) {
+      best = node;
+      bestScore = score;
+    }
+  }
+
+  return bestScore >= 2.4 ? best : null;
+}
+
+function ensureTheoryAttractors(state) {
+  const width = Math.max(320, state.viewport?.width || 1280);
+  const height = Math.max(240, state.viewport?.height || 800);
+
+  for (const attractor of THEORY_ATTRACTORS) {
+    const x = width * attractor.xFactor;
+    const y = height * attractor.yFactor;
+    const index = state.nodes.findIndex((node) => node.id === attractor.id);
+    const attractorNode = {
+      id: attractor.id,
+      title: attractor.label,
+      text: attractor.label,
+      keyword: attractor.label,
+      semanticLabel: attractor.label,
+      concepts: [attractor.label, "Actional Space of Aesthetic Practice"],
+      keywords: [attractor.label, "action", "space", "practice"],
+      semanticGroup: attractor.group,
+      category: attractor.group,
+      role: "attractor",
+      phase: "stabilization",
+      isTheoryAttractor: true,
+      fixed: true,
+      locked: true,
+      stable: true,
+      x,
+      y,
+      targetX: x,
+      targetY: y,
+      anchorX: x,
+      anchorY: y,
+      clusterCenterX: x,
+      clusterCenterY: y,
+      layoutWidth: Math.max(180, width * 0.14),
+      sizeScale: 1.16,
+      mass: 2.4,
+      weight: 1.8,
+      z: 0.38,
+      opacity: 0.9,
+      memoryOpacity: 0.9,
+      theoryResonanceScore: 1,
+      semanticDensity: 0.92,
+      relationCandidates: [],
+      appearanceCount: 1,
+      firstSeenAt: performance.now(),
+      lastSeenAt: performance.now(),
+    };
+
+    if (index === -1) {
+      state.nodes.push(attractorNode);
+      continue;
+    }
+
+    state.nodes[index] = {
+      ...state.nodes[index],
+      ...attractorNode,
+      appearanceCount: (state.nodes[index].appearanceCount || 1) + 1,
+      firstSeenAt: state.nodes[index].firstSeenAt || performance.now(),
+      lastSeenAt: performance.now(),
+    };
+  }
 }
 
 function mergeGraphNode(state, candidate) {
@@ -173,7 +279,7 @@ function trimNodeField(state) {
 
   const removable = state.nodes
     .map((node, index) => ({ node, index }))
-    .filter((entry) => entry.node?.id !== THEORY_CORE_ID)
+    .filter((entry) => !isAnchorNode(entry.node))
     .sort((left, right) => {
       const leftScore = (left.node.semanticDensity || 0) + (left.node.theoryResonanceScore || 0) + (left.node.weight || 0) * 0.1;
       const rightScore = (right.node.semanticDensity || 0) + (right.node.theoryResonanceScore || 0) + (right.node.weight || 0) * 0.1;
@@ -195,13 +301,29 @@ function trimNodeField(state) {
 }
 
 function createCuratedIngestionItem(entry) {
-  const tags = uniqueRelevantTags(entry?.concepts || [], 5);
-  const cleanedExcerpt = cleanExtractionText(entry?.summary || entry?.excerpt || entry?.title || "", 2, 42);
+  const sourceSummary = String(entry?.summary || entry?.excerpt || entry?.title || "").trim();
+  const curatedSignals = curateSemanticSignals([
+    entry?.title,
+    ...(entry?.concepts || []),
+    ...(entry?.categories || []),
+    ...(entry?.links || []),
+    sourceSummary,
+  ], { minScore: 1.08 });
+  if (!curatedSignals.length) {
+    return null;
+  }
+
+  const tags = uniqueRelevantTags(curatedSignals.map((item) => item.signal), 4);
+  const cleanedExcerpt = cleanExtractionText(sourceSummary, 3, 48);
+  if (!cleanedExcerpt) {
+    return null;
+  }
+
   return createFeedLine({
     id: `ingestion-${normalizeKey(entry?.title || entry?.term || Date.now())}-${Date.now()}`,
     nodeId: null,
     source: "Wikipedia",
-    title: entry?.title || entry?.term || "Fragment",
+    title: tags[0] || entry?.title || entry?.term || "Fragment",
     text: cleanedExcerpt,
     excerpt: cleanedExcerpt,
     rawText: entry?.summary || entry?.excerpt || entry?.title || "",
@@ -214,6 +336,7 @@ function createCuratedIngestionItem(entry) {
     wikiLinks: [],
     wikiSummary: cleanedExcerpt,
     wikiUrl: entry?.url || "",
+    theoryRelevance: Number(curatedSignals[0]?.score || 0),
     phase: "ingestion",
     age: 0,
     opacity: 0.88,
@@ -277,6 +400,7 @@ export function createGraphActions(store) {
       state.wikiSeed = Array.isArray(wikiSeed) ? wikiSeed : [];
       state.foundationState = createFoundationState(state.viewport);
       ensureTheoryCoreNode(state);
+      ensureTheoryAttractors(state);
       state.selectedNode = state.selectedNode || THEORY_CORE_ID;
       refreshGraphTopology(state);
       state.nextTransformationAt = performance.now() + 600;
@@ -294,6 +418,7 @@ export function createGraphActions(store) {
       store.update((draft) => {
         draft.viewport = viewport;
         draft.foundationState = createFoundationState(viewport);
+        ensureTheoryAttractors(draft);
         for (const node of draft.nodes) {
           if (node.id === THEORY_CORE_ID) {
             node.x = viewport.width * 0.5;
@@ -365,9 +490,14 @@ export function createGraphActions(store) {
           return;
         }
 
+        const curatedItem = createCuratedIngestionItem(entry);
+        if (!curatedItem) {
+          return;
+        }
+
         store.update((draft) => {
           draft.wikiEntries = [entry, ...draft.wikiEntries].slice(0, MAX_WIKI_ENTRIES);
-          draft.ingestionQueue.push(createCuratedIngestionItem(entry));
+          draft.ingestionQueue.push(curatedItem);
           if (draft.ingestionQueue.length > MAX_QUEUE_ITEMS) {
             draft.ingestionQueue = draft.ingestionQueue.slice(-MAX_QUEUE_ITEMS);
           }
@@ -394,10 +524,11 @@ export function createGraphActions(store) {
 
       store.update((draft) => {
         draft.lastFrameAt = now;
+        ensureTheoryAttractors(draft);
 
         if (now >= draft.nextFeedAt && draft.ingestionQueue.length) {
           const nextLine = draft.ingestionQueue.shift();
-          if (nextLine) {
+          if (nextLine && Number(nextLine.theoryRelevance || 0) >= 1.08) {
             draft.feedLines.push({
               ...nextLine,
               y: draft.viewport.height - 52,
@@ -430,6 +561,9 @@ export function createGraphActions(store) {
             if (!normalized || draft.termKeys.has(normalized)) {
               continue;
             }
+            if ((term.theoryResonanceScore || 0) < 0.54 || (term.semanticDensity || 0) < 0.26) {
+              continue;
+            }
             if (draft.transformationQueue.length >= MAX_TRANSFORMATION_QUEUE) {
               break;
             }
@@ -453,7 +587,20 @@ export function createGraphActions(store) {
         if (now >= draft.nextTransformationAt && draft.transformationQueue.length) {
           const nextTerm = draft.transformationQueue.shift();
           if (nextTerm) {
-            draft.nodes.push({
+            const condensedTarget = findCondensationTarget(draft, nextTerm);
+            if (condensedTarget) {
+              condensedTarget.concepts = mergeUniqueStrings(condensedTarget.concepts || [], nextTerm.concepts || [], nextTerm.keywords || []);
+              condensedTarget.keywords = mergeUniqueStrings(condensedTarget.keywords || [], nextTerm.keywords || [], nextTerm.keyword);
+              condensedTarget.weight = Math.min(4.2, (condensedTarget.weight || 1) + Math.max(0.12, nextTerm.weight || 0.2));
+              condensedTarget.mass = Math.min(5.4, (condensedTarget.mass || 1) + 0.12);
+              condensedTarget.semanticDensity = clamp((condensedTarget.semanticDensity || 0.3) + 0.05, 0, 1);
+              condensedTarget.theoryResonanceScore = clamp(Math.max(condensedTarget.theoryResonanceScore || 0, nextTerm.theoryResonanceScore || 0) + 0.03, 0, 1);
+              condensedTarget.semanticExcerpt = cleanExtractionText(`${condensedTarget.semanticExcerpt || condensedTarget.text || ""} ${nextTerm.excerpt || nextTerm.text || ""}`, 3, 46);
+              condensedTarget.phase = (condensedTarget.theoryResonanceScore || 0) + (condensedTarget.semanticDensity || 0) > 1.14 ? "stabilization" : "formation";
+              condensedTarget.lastSeenAt = performance.now();
+              condensedTarget.appearanceCount = (condensedTarget.appearanceCount || 1) + 1;
+            } else {
+              draft.nodes.push({
               ...nextTerm,
               id: nextTerm.id || `node-${normalizeKey(nextTerm.keyword || nextTerm.text || draft.nodes.length)}-${draft.nodes.length}`,
               phase: "transformation",
@@ -483,13 +630,23 @@ export function createGraphActions(store) {
               age: 0,
               title: nextTerm.title || nextTerm.keyword || nextTerm.text,
               semanticExcerpt: nextTerm.excerpt || nextTerm.text || "",
-            });
+              });
+            }
             trimNodeField(draft);
           }
           draft.nextTransformationAt = now + 1400;
         }
 
         for (const fragment of draft.nodes) {
+          if (fragment.isTheoryAttractor) {
+            fragment.phase = "stabilization";
+            fragment.vx = 0;
+            fragment.vy = 0;
+            fragment.opacity = 0.9;
+            fragment.memoryOpacity = 0.9;
+            continue;
+          }
+
           if (fragment.id === THEORY_CORE_ID) {
             fragment.text = "Actional Space of Aesthetic Practice";
             fragment.keyword = "Actional Space of Aesthetic Practice";
@@ -529,6 +686,7 @@ export function createGraphActions(store) {
         }
 
         advanceForceSimulation(draft, now, delta);
+        trimNodeField(draft);
         draft.categories = refreshCategories(draft, now);
         scheduleGraphStateSave(draft);
       });

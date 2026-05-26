@@ -33,6 +33,14 @@ function attractorFor(node, viewport) {
   const x = width * 0.5;
   const y = height * 0.48;
 
+  if (node?.isTheoryAttractor) {
+    return {
+      x: Number.isFinite(node.targetX) ? node.targetX : node.x,
+      y: Number.isFinite(node.targetY) ? node.targetY : node.y,
+      depth: 0.36,
+    };
+  }
+
   if (node?.isTheoryCore) {
     return { x, y, depth: 0 };
   }
@@ -94,12 +102,25 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
       continue;
     }
 
+    if (node?.isTheoryAttractor) {
+      node.x += (attractor.x - node.x) * 0.2;
+      node.y += (attractor.y - node.y) * 0.2;
+      node.vx = 0;
+      node.vy = 0;
+      node.z = 0.36;
+      node.opacity = 0.9;
+      node.atmosphericOpacity = 0.9;
+      node.sizeScale = 1.14;
+      node.depthBlur = 0.08;
+      continue;
+    }
+
     node.vx = Number(node.vx || 0);
     node.vy = Number(node.vy || 0);
 
     const dx = attractor.x - node.x;
     const dy = attractor.y - node.y;
-    const gravity = 0.00105 + resonance * 0.0016 + density * 0.0012;
+    const gravity = 0.00072 + resonance * 0.00118 + density * 0.00086;
 
     node.vx += (dx * gravity) / mass;
     node.vy += (dy * gravity) / mass;
@@ -119,7 +140,7 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
       const ox = other.x - node.x;
       const oy = other.y - node.y;
       const dist = Math.max(1, Math.hypot(ox, oy));
-      const ideal = clamp(220 - edgeWeight * 44, 90, 180);
+      const ideal = clamp(248 - edgeWeight * 38, 128, 216);
       const pull = ((dist - ideal) * 0.00022 * edgeWeight) / mass;
       node.vx += (ox / dist) * pull;
       node.vy += (oy / dist) * pull;
@@ -127,10 +148,10 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
 
     // Slow architectural drift, not particle jitter.
     const driftPhase = Number(node?.driftPhase || node?.sequenceIndex || index) * 0.32;
-    node.vx += Math.sin(time * 0.00008 + driftPhase) * 0.00075;
-    node.vy += Math.cos(time * 0.00006 + driftPhase) * 0.00062;
+    node.vx += Math.sin(time * 0.000045 + driftPhase) * 0.00038;
+    node.vy += Math.cos(time * 0.00004 + driftPhase) * 0.00032;
 
-    const damping = clamp(0.986 - resonance * 0.015 - temporalFormation * 0.01, 0.955, 0.988);
+    const damping = clamp(0.992 - resonance * 0.01 - temporalFormation * 0.006, 0.972, 0.994);
     node.vx *= damping;
     node.vy *= damping;
 
@@ -148,8 +169,8 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
     node.opacity = clamp(0.26 + relevance * 0.68, 0.2, 1) * ageFade;
     node.atmosphericOpacity = clamp(node.opacity * (0.82 + relevance * 0.24), 0.18, 1);
 
-    node.x = clamp(node.x, 28, width - 28);
-    node.y = clamp(node.y, 42, height - 28);
+    node.x = clamp(node.x, 92, width - 92);
+    node.y = clamp(node.y, 110, height - 86);
   }
 
   return safeFragments;

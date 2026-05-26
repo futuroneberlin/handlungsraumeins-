@@ -1,6 +1,7 @@
 import { fetchWikipediaEntry } from "../../modules/wikipedia.js";
 import { mergeUniqueStrings, nodeIdentity } from "./graphState.js";
 import { createSemanticFragment, createConceptExcerpt, extractKeywords } from "../../modules/textFragmenter.js";
+import { curateSemanticSignals } from "../../core/theoryModel.js";
 
 export function buildFeedEntries(corpus) {
   return (Array.isArray(corpus) ? corpus : []).flatMap((entry) => {
@@ -13,16 +14,27 @@ export function buildFeedEntries(corpus) {
 
     return fragments.map((part) => {
       const fragment = createSemanticFragment(part, { source: entry.source || "theory", excerptWords: 16, keywordLimit: 4 });
+      const curated = curateSemanticSignals([
+        fragment.title,
+        fragment.excerpt,
+        ...(fragment.keywords || []),
+      ], { minScore: 1.02 });
+      if (!curated.length) {
+        return null;
+      }
+
       return {
         ...fragment,
-        title: fragment.title,
+        title: curated[0]?.signal || fragment.title,
         text: fragment.excerpt,
         excerpt: fragment.excerpt,
+        concept: curated[0]?.signal || fragment.concept,
+        theoryRelevance: Number(curated[0]?.score || 0),
         age: 0,
         opacity: 0.92,
         y: 0,
       };
-    });
+    }).filter(Boolean);
   }).map((entry, index) => ({
     id: `feed-${index}-${String(entry.excerpt || entry.text || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")}`,
     source: entry.source || "theory",
@@ -31,10 +43,11 @@ export function buildFeedEntries(corpus) {
     keywords: entry.keywords || [],
     concept: entry.concept || entry.title || entry.source || "Fragment",
     text: entry.excerpt || entry.text || "",
+    theoryRelevance: Number(entry.theoryRelevance || 0),
     age: 0,
     opacity: 0.92,
     y: 0,
-  }));
+  })).filter((entry) => entry.theoryRelevance >= 1.02);
 }
 
 export function createWikipediaNode(entry, viewport, existingCount = 0) {

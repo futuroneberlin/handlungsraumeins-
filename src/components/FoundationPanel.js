@@ -28,14 +28,14 @@ export function FoundationPanel({ categories = [], stabilizations = [], selected
       key: entry.id,
       title: entry.conceptName,
       text: entry.explanation,
-      meta: `${entry.mapping}${entry.nodeCount ? ` · ${entry.nodeCount} nodes` : ""}${Number.isFinite(entry.density) ? ` · density ${String(entry.density)}` : ""}`,
+      meta: entry.mapping,
       nodeId: entry.nodeId || null,
       onClick: onNodeSelect,
-      children: entry.linkedFragments?.length ? createElement("small", null, `linked fragments: ${entry.linkedFragments.slice(0, 3).join(" · ")}`) : null,
+      children: entry.linkedFragments?.length ? createElement("small", null, `Verbunden mit Fragmenten: ${entry.linkedFragments.slice(0, 4).join(" · ")}`) : null,
     })) : createElement(SemanticNodeCard, {
       title: "Waiting for emergence",
-      text: "Categories form only after sufficient density.",
-      meta: "center simulation active",
+      text: "Stabilisierungen erscheinen, sobald semantische Verdichtung und Theorie-Resonanz ein tragfähiges Interpretationsfeld bilden.",
+      meta: "kuratorische Auswertung aktiv",
     }),
   );
 }

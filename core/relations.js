@@ -425,8 +425,19 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
       const sequentialBoost = rightIndex === leftIndex + 1 ? 0.18 : 0;
       const proximityBoost = left.phase === right.phase ? 0.1 : 0;
       const adjustedScore = score + sequentialBoost + proximityBoost;
+      const overlapStrength = sharedConcepts.length + sharedTheorySignals.length * 1.4 + sharedKeywords.length * 0.5;
+      const reinforcementScore = repetitionScore + (sameCategory ? 0.3 : 0) + (left.phase === "stabilization" && right.phase === "stabilization" ? 0.36 : 0);
+      const anchorLink = left.isTheoryCore || right.isTheoryCore || left.isTheoryAttractor || right.isTheoryAttractor;
 
-      if (semanticStrength < 1.2 || (adjustedScore < 1.42 && theoryCoreOverlap.length === 0) || contextualProximity < 0.6) {
+      if (semanticStrength < 1.45 || adjustedScore < 1.9 || contextualProximity < 0.74 || overlapStrength < 1.3 || reinforcementScore < 0.42) {
+        continue;
+      }
+
+      if (anchorLink && (theoryBoost < 0.92 || sharedTheorySignals.length === 0)) {
+        continue;
+      }
+
+      if (!theoryDriven && sharedConcepts.length === 0) {
         continue;
       }
 
@@ -484,7 +495,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
   return uniqueBy(edges, (edge) => edge.id)
     .filter((relation) => relation.leftIndex >= 0 && relation.rightIndex >= 0)
     .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(24, Math.ceil(safeNodes.length * 1.2)));
+    .slice(0, Math.max(10, Math.ceil(safeNodes.length * 0.66)));
 }
 
 export function createEmergentCategories(nodes, edges = [], timestamp = now()) {

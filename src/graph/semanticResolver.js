@@ -169,6 +169,7 @@ export function getTheoryStabilizationEntries(state) {
   const nodes = Array.isArray(state?.nodes) ? state.nodes : [];
   const categories = Array.isArray(state?.categories) ? state.categories : [];
   const topCategories = categories
+    .filter((category) => (category.stable || 0) && (category.density || 0) >= 0.9)
     .slice()
     .sort((left, right) => (right.conceptWeight || 0) - (left.conceptWeight || 0) || (right.density || 0) - (left.density || 0))
     .slice(0, 4);
@@ -180,14 +181,16 @@ export function getTheoryStabilizationEntries(state) {
       .slice(0, 3);
 
     const conceptName = String(category.label || "Conceptual Condensation");
-    const explanation = synthesizeConceptualStatement([
+    const stabilizationStatement = synthesizeConceptualStatement([
       conceptName,
       ...(category.concepts || []),
       ...linkedNodes.flatMap((node) => node.concepts || []),
     ], "Meaning stabilizes through theory-guided spatial transformation.");
 
+    const explanation = `${stabilizationStatement} Die Verdichtung entsteht aus wiederholter semantischer Verstärkung und räumlicher Stabilisierung im Transformationsfeld.`;
+
     let mapping = "Mapped to Actional Space: participation as structure and temporal emergence of form.";
-    const lower = explanation.toLowerCase();
+    const lower = stabilizationStatement.toLowerCase();
     if (lower.includes("temporal") || lower.includes("process")) {
       mapping = "Mapped to Actional Space: temporality structures how fragments become form.";
     } else if (lower.includes("spatial") || lower.includes("space")) {
@@ -205,7 +208,7 @@ export function getTheoryStabilizationEntries(state) {
       linkedFragments: linkedNodes.map((node) => node.semanticLabel || node.title || node.keyword || node.text).filter(Boolean),
       mapping,
     };
-  });
+  }).filter((entry) => entry.linkedFragments.length >= 2);
 }
 
 export function updateSemanticLayers(state, timestamp = performance.now()) {

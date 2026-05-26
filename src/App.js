@@ -217,12 +217,12 @@ export function App() {
     ),
     right: createElement(
       "aside",
-      { className: "fundament zone", "aria-label": "Emergent Categories" },
+      { className: "fundament zone", "aria-label": "Theoretical Stabilization and Interpretation" },
       createElement(
         "div",
         { className: "zone-header" },
         createElement("p", { className: "eyebrow" }, "Right"),
-        createElement("h1", null, "Emergent Categories / Foundation"),
+        createElement("h1", null, "Theoretical Stabilization / Interpretation"),
       ),
       createElement(TheoryPanel, { synthesizedStatements: theorySynthesis }),
       createElement(FoundationPanel, {
