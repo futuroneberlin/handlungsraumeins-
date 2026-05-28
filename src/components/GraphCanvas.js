@@ -576,6 +576,8 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
   const centerForceRef = useRef(null);
   const linkForceRef = useRef(null);
   const collisionForceRef = useRef(null);
+  const nodesLayerRef = useRef(null);
+  const linksLayerRef = useRef(null);
   const nodeElementsRef = useRef(new Map());
   const linkElementsRef = useRef(new Map());
   const sceneRef = useRef({
@@ -678,6 +680,8 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     const linksLayer = createSvgElement("g", { class: "edge-layer-root" });
     const nodesLayer = createSvgElement("g", { class: "node-layer-root" });
     svg.append(defs, linksLayer, nodesLayer);
+    linksLayerRef.current = linksLayer;
+    nodesLayerRef.current = nodesLayer;
 
     const centerForce = forceCenter(0, 0);
     const linkForce = forceLink([])
@@ -727,6 +731,8 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     centerForceRef.current = centerForce;
     linkForceRef.current = linkForce;
     collisionForceRef.current = collisionForce;
+    linksLayerRef.current = linksLayer;
+    nodesLayerRef.current = nodesLayer;
     nodeElementsRef.current.clear();
     linkElementsRef.current.clear();
     nodeElementsRef.current = new Map();
@@ -744,6 +750,8 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       centerForceRef.current = null;
       linkForceRef.current = null;
       collisionForceRef.current = null;
+      nodesLayerRef.current = null;
+      linksLayerRef.current = null;
       nodeElementsRef.current.clear();
       linkElementsRef.current.clear();
       if (svg) {
