@@ -249,6 +249,30 @@ export function evaluateNodeTheoryResonance(node, options = {}) {
   ], options);
 }
 
+export function translateSemanticPhysics(resonanceScore = 0, activatedDimensions = []) {
+  const score = clamp01(Number(resonanceScore || 0) / 4);
+  const dimensionCount = Array.isArray(activatedDimensions) ? activatedDimensions.length : 0;
+  const densityBoost = Math.min(0.18, dimensionCount * 0.024);
+  const stability = clamp01(score * 0.72 + densityBoost);
+
+  return {
+    semanticMass: Number((0.82 + stability * 3.9).toFixed(3)),
+    forcePull: Number((0.018 + stability * 0.07).toFixed(4)),
+    damping: Number((0.992 - stability * 0.03).toFixed(4)),
+    collisionRadius: Number((74 + stability * 92).toFixed(2)),
+    orbitRadius: Number((238 - stability * 128).toFixed(2)),
+    orbitSpeed: Number((0.0019 - stability * 0.00135).toFixed(5)),
+    persistence: Number((0.24 + stability * 0.72).toFixed(3)),
+    opacity: Number((0.26 + stability * 0.68).toFixed(3)),
+    depth: Number((1.72 - stability * 1.12).toFixed(3)),
+    depthLift: Number((10 + stability * 14).toFixed(2)),
+  };
+}
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, value));
+}
+
 export function curateSemanticSignals(signals = [], options = {}) {
   const minScore = Number.isFinite(options.minScore) ? options.minScore : 1.15;
   const normalizedSignals = uniqueNormalized(signals);

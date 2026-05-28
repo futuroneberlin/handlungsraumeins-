@@ -1,7 +1,7 @@
 import { createFoundationState } from "../../core/layout.js";
 import { extractFoundationTerms } from "../../modules/semanticExtractor.js";
 import { loadTheoryCorpus } from "../../modules/theoryLoader.js";
-import { evaluateTheoryResonance, evaluateNodeTheoryResonance } from "../../core/theoryModel.js";
+import { evaluateTheoryResonance, evaluateNodeTheoryResonance, translateSemanticPhysics } from "../../core/theoryModel.js";
 import { ensureTheoryCoreNode, mergeUniqueStrings, scheduleGraphStateSave } from "./graphState.js";
 import { buildFeedEntries, collectExpansionTopics, loadWikipediaPulse } from "./wikipediaIngestion.js";
 import { refreshCategories } from "./categoryEngine.js";
@@ -322,6 +322,8 @@ function createCuratedIngestionItem(entry) {
     return null;
   }
 
+  const physics = translateSemanticPhysics(evaluation.score, evaluation.activatedDimensions);
+
   return createFeedLine({
     id: `ingestion-${normalizeKey(entry?.title || entry?.term || Date.now())}-${Date.now()}`,
     nodeId: null,
@@ -341,6 +343,7 @@ function createCuratedIngestionItem(entry) {
     wikiUrl: entry?.url || "",
     concepts: tags,
     activatedDimensions: evaluation.activatedDimensions || [],
+    semanticPhysics: physics,
     theoryRelevance: Number(evaluation.score || 0),
     phase: "ingestion",
     age: 0,
@@ -580,6 +583,7 @@ export function createGraphActions(store) {
             if ((term.theoryResonanceScore || 0) < 0.5 || (term.semanticDensity || 0) < 0.22) {
               continue;
             }
+            const physics = translateSemanticPhysics(termValidation.score, termValidation.activatedDimensions);
             if (draft.transformationQueue.length >= MAX_TRANSFORMATION_QUEUE) {
               break;
             }
@@ -594,6 +598,7 @@ export function createGraphActions(store) {
               source: term.source || "theorie",
               activatedDimensions: termValidation.activatedDimensions,
               theoryValidationScore: termValidation.score,
+              semanticPhysics: physics,
               age: 0,
               opacity: term.opacity ?? 0.92,
               memoryOpacity: term.memoryOpacity ?? 0.72,
@@ -618,6 +623,7 @@ export function createGraphActions(store) {
               condensedTarget.lastSeenAt = performance.now();
               condensedTarget.appearanceCount = (condensedTarget.appearanceCount || 1) + 1;
               condensedTarget.theoryDimensions = mergeUniqueStrings(condensedTarget.theoryDimensions || [], nextTerm.activatedDimensions || []);
+              condensedTarget.semanticPhysics = translateSemanticPhysics(condensedTarget.theoryValidationScore || condensedTarget.theoryResonanceScore || 0, condensedTarget.theoryDimensions || []);
             } else {
               draft.nodes.push({
               ...nextTerm,
@@ -632,6 +638,7 @@ export function createGraphActions(store) {
               semanticDensity: nextTerm.semanticDensity ?? 0,
               theoryResonanceScore: nextTerm.theoryResonanceScore ?? nextTerm.resonance ?? 0,
               theoryDimensions: nextTerm.activatedDimensions || [],
+              semanticPhysics: nextTerm.semanticPhysics || translateSemanticPhysics(nextTerm.theoryValidationScore || nextTerm.theoryResonanceScore || 0, nextTerm.activatedDimensions || []),
               relationCandidates: Array.isArray(nextTerm.relationCandidates) ? nextTerm.relationCandidates : [],
               lane: Number.isInteger(nextTerm.preferredLane) ? nextTerm.preferredLane : 1,
               rowIndex: Number.isInteger(nextTerm.fragmentOrder) ? nextTerm.fragmentOrder : draft.nodes.length,
@@ -689,6 +696,7 @@ export function createGraphActions(store) {
           const resonance = evaluateNodeTheoryResonance(fragment, { minScore: 1.7 });
           fragment.theoryValidationScore = resonance.score;
           fragment.theoryDimensions = resonance.activatedDimensions;
+          fragment.semanticPhysics = fragment.semanticPhysics || translateSemanticPhysics(fragment.theoryValidationScore || fragment.theoryResonanceScore || 0, fragment.theoryDimensions || []);
 
           if ((fragment.age || 0) < 6) {
             fragment.phase = "formation";

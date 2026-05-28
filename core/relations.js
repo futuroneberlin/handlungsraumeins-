@@ -91,17 +91,16 @@ function relationScore(left, right) {
     ...(rightResonance.activatedDimensions || []),
     ...sharedConcepts,
     ...sharedTheorySignals,
-    ...sharedKeywords,
     left.semanticLabel,
     right.semanticLabel,
   ], { minScore: 1.65 });
-  const theoryBoost = Math.min(2.6, (theoryLeft + theoryRight) * 0.26 + theoryCoreOverlap.length * 0.62 + Math.min(1.1, pairResonance.score * 0.28));
+  const theoryBoost = Math.min(2.8, (theoryLeft + theoryRight) * 0.26 + theoryCoreOverlap.length * 0.72 + Math.min(1.2, pairResonance.score * 0.36));
   const repetitionScore = Math.min(1.2, Math.min(left.appearanceCount || 1, right.appearanceCount || 1) * 0.12);
   const conceptScore = Math.min(2.8, sharedConceptWeight(leftVector, rightVector, sharedConcepts) * 0.74 + sharedConcepts.length * 0.34);
-  const semanticSimilarity = Math.min(3.2, conceptScore + sharedScore * 0.34 + tokenScore * 0.22 + categoryScore * 0.12 + linkScore * 0.05);
-  const contextualProximity = Math.min(1.8, (proximityScore * 1.24) + laneScore * 0.65 + phaseScore * 0.7 + sourceScore * 0.52);
-  const structuralSimilarity = Math.min(1.8, ((leftVector?.density || 0) + (rightVector?.density || 0)) * 0.5 + Math.min(leftVector?.theoryResonanceScore || 0, rightVector?.theoryResonanceScore || 0));
-  const reinforcement = Math.min(1.4, repetitionScore * 0.4 + sharedConcepts.length * 0.2 + theoryCoreOverlap.length * 0.3);
+  const semanticSimilarity = Math.min(3.2, conceptScore + pairResonance.score * 0.26 + sharedConcepts.length * 0.18);
+  const contextualProximity = Math.min(1.6, (proximityScore * 0.92) + laneScore * 0.24 + phaseScore * 0.48);
+  const structuralSimilarity = Math.min(1.8, ((leftVector?.density || 0) + (rightVector?.density || 0)) * 0.34 + Math.min(leftVector?.theoryResonanceScore || 0, rightVector?.theoryResonanceScore || 0));
+  const reinforcement = Math.min(1.5, repetitionScore * 0.34 + sharedConcepts.length * 0.26 + theoryCoreOverlap.length * 0.34);
   const narrative = composeRelationNarrative({ left, right, leftVector, rightVector, sharedConcepts, sharedTheorySignals, sharedCategories, sharedLinks, sharedKeywords, theoryBoost, proximityScore: contextualProximity });
   return {
     score: semanticSimilarity + contextualProximity + structuralSimilarity + reinforcement + massScore + groupScore + bridgeScore + theoryBoost,
@@ -434,20 +433,20 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
       const right = safeNodes[rightIndex];
       const relation = relationScore(left, right);
       const { score, sharedKeywords, sharedCategories, sharedLinks, sharedTokens, sharedTheorySignals, theoryCoreOverlap, sharedConcepts, theoryBoost, repetitionScore, contextualProximity, leftVector, rightVector, semanticStrength, leftResonance, rightResonance, pairResonance } = relation;
-      const sameCategory = sharedCategories.length > 0 && String(left.semanticGroup || left.category || "").toLowerCase() === String(right.semanticGroup || right.category || "").toLowerCase();
-      const theoryDriven = theoryBoost > 0.75 || sharedTheorySignals.length > 0;
+        const sameCategory = sharedCategories.length > 0 && String(left.semanticGroup || left.category || "").toLowerCase() === String(right.semanticGroup || right.category || "").toLowerCase();
+        const theoryDriven = theoryBoost > 0.88 || sharedTheorySignals.length > 0 || pairResonance.score > 2.1;
       const sequentialBoost = rightIndex === leftIndex + 1 ? 0.18 : 0;
       const proximityBoost = left.phase === right.phase ? 0.1 : 0;
       const adjustedScore = score + sequentialBoost + proximityBoost;
-      const overlapStrength = sharedConcepts.length + sharedTheorySignals.length * 1.4 + sharedKeywords.length * 0.5;
-      const reinforcementScore = repetitionScore + (sameCategory ? 0.3 : 0) + (left.phase === "stabilization" && right.phase === "stabilization" ? 0.36 : 0);
+        const overlapStrength = sharedConcepts.length + sharedTheorySignals.length * 1.6 + pairResonance.score * 0.4;
+        const reinforcementScore = repetitionScore + (sameCategory ? 0.2 : 0) + (left.phase === "stabilization" && right.phase === "stabilization" ? 0.24 : 0);
       const anchorLink = left.isTheoryCore || right.isTheoryCore || left.isTheoryAttractor || right.isTheoryAttractor;
 
       if (leftResonance.reject || rightResonance.reject || pairResonance.reject) {
         continue;
       }
 
-      if (semanticStrength < 1.05 || adjustedScore < 1.25 || contextualProximity < 0.52 || reinforcementScore < 0.2) {
+        if (semanticStrength < 0.92 || adjustedScore < 1.1 || contextualProximity < 0.36 || reinforcementScore < 0.16) {
         continue;
       }
 
@@ -455,7 +454,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
         continue;
       }
 
-      if (!theoryDriven && sharedConcepts.length === 0 && pairResonance.score < 2.1) {
+      if (!theoryDriven && sharedConcepts.length === 0 && pairResonance.score < 2.0) {
         continue;
       }
 
@@ -515,7 +514,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
   return uniqueBy(edges, (edge) => edge.id)
     .filter((relation) => relation.leftIndex >= 0 && relation.rightIndex >= 0)
     .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(12, Math.ceil(safeNodes.length * 0.85)));
+    .slice(0, Math.max(14, Math.ceil(safeNodes.length * 1.05)));
 }
 
 export function createEmergentCategories(nodes, edges = [], timestamp = now()) {
