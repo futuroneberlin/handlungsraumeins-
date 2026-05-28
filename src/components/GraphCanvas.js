@@ -112,9 +112,13 @@ function projectNodeDepth(node, width, height) {
   const physics = node.semanticPhysics || {};
   const zValue = Number.isFinite(node.z) ? node.z : Number(physics.depth || 1);
   const activity = Number.isFinite(node.semanticActivity) ? node.semanticActivity : 0;
-  const depthScale = clamp(1.12 - distanceRatio * 0.18 + (1.25 - zValue) * 0.22 + activity * 0.08, 0.68, 1.5);
-  const depthLift = Math.round((1.25 - zValue) * 20 + activity * 8 - distanceRatio * 8 + Number(physics.depthLift || 0));
-  const depthBlur = clamp(0.36 + distanceRatio * 0.22 + Math.max(0, zValue - 1) * 0.08 - activity * 0.11, 0.02, 0.56);
+  const phase = String(node.phase || "transformation");
+  const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
+  const density = clamp(Number(node.semanticDensity || 0), 0, 1);
+  const phaseLift = phase === "stabilization" ? 0.16 : phase === "formation" ? 0.08 : 0;
+  const depthScale = clamp(0.9 + resonance * 0.58 + density * 0.24 + phaseLift - distanceRatio * 0.1 + (1.25 - zValue) * 0.16, 0.5, 1.92);
+  const depthLift = Math.round((1.35 - zValue) * 24 + activity * 10 - distanceRatio * 10 + Number(physics.depthLift || 0) + (phase === "stabilization" ? 6 : 0));
+  const depthBlur = clamp(0.26 + distanceRatio * 0.28 + Math.max(0, zValue - 1) * 0.12 - resonance * 0.14, 0.02, 0.7);
 
   return {
     depthScale,
@@ -127,21 +131,23 @@ function projectNodeDepth(node, width, height) {
 function projectNodeBody(node) {
   const physics = node.semanticPhysics || {};
   const density = clamp(Number(node.semanticDensity || 0), 0, 1);
-  const resonance = clamp(Number(node.theoryResonanceScore || 0) / 4, 0, 1);
+  const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
   const activity = clamp(Number(node.semanticActivity || 0), 0, 1);
   const mass = clamp(Number(physics.semanticMass || node.mass || node.weight || 1), 0.7, 6.2);
   const baseWidth = Math.max(74, Number(node.layoutWidth || 220));
-  const baseHeight = Math.max(34, baseWidth * (0.18 + density * 0.08));
-  const width = baseWidth * (0.84 + resonance * 0.36 + activity * 0.1);
-  const height = baseHeight * (0.9 + resonance * 0.22 + mass * 0.03);
-  const squash = clamp(1 - (node.distanceRatio || 0) * 0.2 + resonance * 0.12, 0.66, 1.12);
+  const phase = String(node.phase || "transformation");
+  const phaseBias = phase === "stabilization" ? 0.42 : phase === "formation" ? 0.18 : -0.08;
+  const baseHeight = Math.max(34, baseWidth * (0.16 + density * 0.16));
+  const width = baseWidth * (0.76 + resonance * 0.76 + activity * 0.12 + phaseBias * 0.14);
+  const height = baseHeight * (0.84 + resonance * 0.3 + mass * 0.05 + phaseBias * 0.1);
+  const squash = clamp(1 - (node.distanceRatio || 0) * 0.26 + resonance * 0.18 + (phase === "stabilization" ? 0.08 : 0), 0.58, 1.22);
   return {
     width,
     height: height * squash,
-    haloWidth: width * (1.22 + activity * 0.18),
-    haloHeight: height * (1.48 + activity * 0.22),
-    coreWidth: width * (0.58 + resonance * 0.12),
-    coreHeight: height * (0.5 + resonance * 0.12),
+    haloWidth: width * (1.18 + activity * 0.18 + (phase === "stabilization" ? 0.1 : 0)),
+    haloHeight: height * (1.38 + activity * 0.22 + (phase === "stabilization" ? 0.12 : 0)),
+    coreWidth: width * (0.5 + resonance * 0.24),
+    coreHeight: height * (0.44 + resonance * 0.22),
     mass,
     density,
     resonance,
@@ -149,11 +155,93 @@ function projectNodeBody(node) {
   };
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function createSvgElement(name, attributes = {}) {
+  const element = document.createElementNS(SVG_NS, name);
+  for (const [key, value] of Object.entries(attributes)) {
+    if (value === undefined || value === null || value === false) {
+      continue;
+    }
+    element.setAttribute(key, String(value));
+  }
+  return element;
+}
+
+function setSvgElementAttributes(element, attributes = {}) {
+  for (const [key, value] of Object.entries(attributes)) {
+    if (value === undefined || value === null || value === false) {
+      element.removeAttribute(key);
+      continue;
+    }
+
+    if (key === "style") {
+      element.setAttribute(key, String(value));
+      continue;
+    }
+
+    element.setAttribute(key, String(value));
+  }
+}
+
+function createNodeVisual(nodeId, onNodeSelect) {
+  const group = createSvgElement("g", { "data-node-id": nodeId, style: "pointer-events:auto;cursor:pointer" });
+  const orbit = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none" });
+  const halo = createSvgElement("ellipse", { cx: 0, cy: 0 });
+  const body = createSvgElement("ellipse", { cx: 0, cy: 0 });
+  const core = createSvgElement("ellipse", { cx: 0, cy: 0 });
+  const particles = [0, 1, 2].map(() => createSvgElement("circle", { cx: 0, cy: 0 }));
+
+  group.append(orbit, halo, body, core, ...particles);
+  group.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onNodeSelect?.(nodeId);
+  });
+
+  return {
+    group,
+    orbit,
+    halo,
+    body,
+    core,
+    particles,
+  };
+}
+
+function createLinkVisual() {
+  return createSvgElement("path", {
+    fill: "none",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    pointerEvents: "none",
+    markerEnd: "url(#relation-arrow)",
+  });
+}
+
 export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges = null, className = "", style, ...rest }) {
   const effectiveStore = store || graphStore;
   useGraphVersion(effectiveStore);
   const state = effectiveStore.getState();
   const containerRef = useRef(null);
+  const svgRef = useRef(null);
+  const simulationRef = useRef(null);
+  const centerForceRef = useRef(null);
+  const linkForceRef = useRef(null);
+  const collisionForceRef = useRef(null);
+  const nodesLayerRef = useRef(null);
+  const linksLayerRef = useRef(null);
+  const nodeElementsRef = useRef(new Map());
+  const linkElementsRef = useRef(new Map());
+  const renderSceneRef = useRef(null);
+  const sceneRef = useRef({
+    nodes: [],
+    links: [],
+    width: 0,
+    height: 0,
+    selectedNodeId: null,
+    activityMap: new Map(),
+    neighborIds: new Set(),
+  });
   const onNodeSelectRef = useRef(onNodeSelect);
   onNodeSelectRef.current = onNodeSelect;
 
@@ -193,72 +281,36 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     };
   }, [actions, store]);
 
-  const hasRealNodes = (state.nodes || []).length > 0;
-  const baseNodes = hasRealNodes ? (state.nodes || []) : (debugNodes || []);
-  const baseEdges = hasRealNodes ? (state.edges || []) : (debugEdges || []);
-  const selectedNodeId = state.selectedNode || null;
-
-  const simulation = useMemo(() => {
-    const width = Math.max(320, state.viewport?.width || 0 || 960);
-    const height = Math.max(240, state.viewport?.height || 0 || 560);
-    const centerX = width * 0.5;
-    const centerY = height * 0.5;
-
-    const nodes = baseNodes.map((node, index) => {
-      const nodeId = extractNodeId(node) || `node-${index}`;
-      const fallbackAngle = (index / Math.max(1, baseNodes.length)) * Math.PI * 2;
-      const fallbackRadius = Math.min(width, height) * 0.26;
-      const x = Number.isFinite(node.x) ? node.x : centerX + Math.cos(fallbackAngle) * fallbackRadius;
-      const y = Number.isFinite(node.y) ? node.y : centerY + Math.sin(fallbackAngle) * fallbackRadius;
-      const physics = node.semanticPhysics || {};
-
-      return {
-        ...node,
-        id: nodeId,
-        x,
-        y,
-        semanticPhysics: physics,
-      };
-    });
-
-    const nodesById = new Map(nodes.map((node) => [node.id, node]));
-    const activityMap = createFeedActivityIndex({ ...state, nodes });
-
-    const links = baseEdges
-      .slice(0, 900)
-      .map((edge, edgeIndex) => {
-        const sourceNode = resolveEndpoint(edge.source ?? edge.leftId ?? edge.sourceId ?? edge.leftIndex, nodesById, nodes);
-        const targetNode = resolveEndpoint(edge.target ?? edge.rightId ?? edge.targetId ?? edge.rightIndex, nodesById, nodes);
-        if (!sourceNode || !targetNode) {
-          return null;
-        }
-
-        return {
-          ...edge,
-          id: edge.id || `edge-${edgeIndex}`,
-          source: sourceNode.id,
-          target: targetNode.id,
-          sourceNode,
-          targetNode,
-        };
-      })
-      .filter(Boolean);
-
-    const neighborIds = new Set();
-    if (selectedNodeId) {
-      for (const edge of links) {
-        const sourceId = String(edge.source || edge.sourceNode?.id || "");
-        const targetId = String(edge.target || edge.targetNode?.id || "");
-        if (sourceId === selectedNodeId) {
-          neighborIds.add(targetId);
-        }
-        if (targetId === selectedNodeId) {
-          neighborIds.add(sourceId);
-        }
-      }
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || simulationRef.current) {
+      return undefined;
     }
 
-    const linkForce = forceLink(links)
+    svg.innerHTML = "";
+
+    const defs = createSvgElement("defs");
+    const marker = createSvgElement("marker", {
+      id: "relation-arrow",
+      markerWidth: 8,
+      markerHeight: 8,
+      refX: 7,
+      refY: 3.5,
+      orient: "auto",
+      markerUnits: "strokeWidth",
+    });
+    marker.appendChild(createSvgElement("path", { d: "M0,0 L0,7 L7,3.5 z", fill: "#ffffff", "fill-opacity": 0.78 }));
+    const filter = createSvgElement("filter", { id: "relation-soft-glow", x: "-20%", y: "-20%", width: "140%", height: "140%" });
+    filter.appendChild(createSvgElement("feGaussianBlur", { stdDeviation: 1.1, result: "blur" }));
+    filter.appendChild(createSvgElement("feColorMatrix", { in: "blur", type: "matrix", values: "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.85 0" }));
+    defs.append(marker, filter);
+
+    const linksLayer = createSvgElement("g", { class: "edge-layer-root" });
+    const nodesLayer = createSvgElement("g", { class: "node-layer-root" });
+    svg.append(defs, linksLayer, nodesLayer);
+
+    const centerForce = forceCenter(0, 0);
+    const linkForce = forceLink([])
       .id((node) => node.id)
       .distance((edge) => {
         const physics = edge.sourceNode?.semanticPhysics || edge.targetNode?.semanticPhysics || {};
@@ -269,121 +321,114 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         const confidence = Number(edge.confidence || edge.semanticStrength || edge.score || edge.weight || 0);
         return clamp(0.12 + confidence * 0.16, 0.08, 0.34);
       });
-
-    const collision = forceCollide()
+    const collisionForce = forceCollide()
       .radius((node) => {
         const physics = node.semanticPhysics || {};
-        const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
-        return Math.max(44, physics.collisionRadius || (node.layoutWidth || 220) * (0.22 + activity * 0.1));
+        return Math.max(44, physics.collisionRadius || (node.layoutWidth || 220) * 0.24);
       })
       .iterations(2);
 
-    const simulationModel = forceSimulation(nodes)
-      .force("center", forceCenter(centerX, centerY))
+    const simulation = forceSimulation([])
+      .force("center", centerForce)
       .force("link", linkForce)
       .force("charge", forceManyBody().strength((node) => {
         const physics = node.semanticPhysics || {};
         const resonance = Number(node.theoryResonanceScore || 0);
         return -(52 + (physics.semanticMass || 1) * 22 + resonance * 14 + (node.semanticDensity || 0) * 18);
       }))
-      .force("collision", collision)
-      .stop();
+      .force("collision", collisionForce);
 
-    for (let tick = 0; tick < 24; tick += 1) {
-      simulationModel.tick();
-    }
+    simulation.on("tick", () => {
+      const scene = sceneRef.current;
+      const { nodes, links, selectedNodeId, neighborIds, activityMap, width, height } = scene;
 
-    const projectedNodes = nodes
-      .map((node) => {
-        const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
-        const { depthScale, distanceRatio, depthLift, depthBlur } = projectNodeDepth(node, width, height);
-        const baseOpacity = clamp(node.atmosphericOpacity ?? node.opacity ?? 0.82, 0.2, 1);
-        const body = projectNodeBody({ ...node, semanticActivity: activity, distanceRatio });
-        const physics = node.semanticPhysics || {};
-        const isSelected = selectedNodeId && node.id === selectedNodeId;
-        const isNeighbor = selectedNodeId && neighborIds.has(node.id);
-        const focusBoost = isSelected ? 0.28 : isNeighbor ? 0.14 : 0;
+      const nodeLookup = new Map(nodes.map((node) => [node.id, node]));
 
-        return {
-          ...node,
-          depthScale: clamp(depthScale + focusBoost, 0.68, 1.7),
-          distanceRatio,
-          depthLift,
-          depthBlur,
-          body,
-          semanticActivity: activity,
-          renderOpacity: clamp(baseOpacity * (0.26 + activity * 0.74) * (isSelected ? 1 : isNeighbor ? 0.92 : 0.78) * (0.96 - Math.min(0.28, Math.max(0, ((node.z ?? physics.depth) || 1) - 1) * 0.12)), 0.06, 1),
-          orbitOpacity: clamp(0.18 + (physics.persistence || 0.4) * 0.62, 0.12, 0.9),
-          isSelected,
-          isNeighbor,
-        };
-      })
-      .sort((left, right) => (right.z ?? 0) - (left.z ?? 0) || right.distanceRatio - left.distanceRatio);
-
-    const projectedById = new Map(projectedNodes.map((node) => [node.id, node]));
-    const projectedLinks = links
-      .map((edge) => {
-        const sourceNode = projectedById.get(extractNodeId(edge.sourceNode) || String(edge.source || "")) || projectedById.get(String(edge.source));
-        const targetNode = projectedById.get(extractNodeId(edge.targetNode) || String(edge.target || "")) || projectedById.get(String(edge.target));
-
-        if (!sourceNode || !targetNode) {
-          return null;
+      for (const node of nodes) {
+        const nodeElements = nodeElementsRef.current.get(node.id);
+        if (!nodeElements) {
+          continue;
         }
 
-        return {
-          ...edge,
-          sourceNode,
-          targetNode,
-        };
-      })
-      .filter(Boolean);
+        const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
+        const { depthScale, depthLift, depthBlur } = projectNodeDepth({ ...node, semanticActivity: activity }, width, height);
+        const isSelected = selectedNodeId && node.id === selectedNodeId;
+        const isNeighbor = selectedNodeId && neighborIds.has(node.id);
+        const body = projectNodeBody({ ...node, semanticActivity: activity, distanceRatio: clamp(Math.hypot((node.x || 0) - width * 0.5, (node.y || 0) - height * 0.5) / Math.max(120, Math.hypot(width * 0.5, height * 0.5)), 0, 1) });
+        const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
+        const phase = String(node.phase || "transformation");
+        const opacity = clamp((node.atmosphericOpacity ?? node.opacity ?? 0.82) * (isSelected ? 1 : isNeighbor ? 0.94 : resonance < 0.22 ? 0.7 : 0.9), 0.04, 1);
+        const transform = `translate(${node.x || 0}, ${node.y + depthLift || 0}) scale(${clamp(depthScale + (isSelected ? 0.28 : isNeighbor ? 0.14 : 0), 0.5, 2)})`;
 
-    return {
-      nodes: projectedNodes,
-      edges: projectedLinks,
-      width,
-      height,
-    };
-  }, [baseEdges, baseNodes, state.feedLines, state.viewport?.height, state.viewport?.width, state.nodes]);
+        nodeElements.group.setAttribute("transform", transform);
+        nodeElements.group.setAttribute("opacity", String(opacity));
+        nodeElements.group.setAttribute("data-selected", isSelected ? "true" : "false");
+        nodeElements.group.setAttribute("data-neighbor", isNeighbor ? "true" : "false");
 
-  const renderNodes = simulation.nodes;
-  const renderEdges = simulation.edges;
-  const viewWidth = simulation.width;
-  const viewHeight = simulation.height;
+        setSvgElementAttributes(nodeElements.orbit, {
+          rx: nodeElements.body ? Number(nodeElements.body.getAttribute("rx") || 0) * 1.14 : Math.max(58, (node.layoutWidth || 220) * 0.34),
+          ry: nodeElements.body ? Number(nodeElements.body.getAttribute("ry") || 0) * 1.2 : Math.max(24, (node.layoutWidth || 220) * 0.1),
+          stroke: isSelected ? "#f6f0e7" : isNeighbor ? "#d9caa8" : "#ffffff",
+          strokeOpacity: isSelected ? 0.28 : isNeighbor ? 0.16 : 0.08,
+          strokeWidth: isSelected ? 1.6 : isNeighbor ? 1.2 : 0.9,
+          strokeDasharray: resonance < 0.3 ? "3 7" : null,
+        });
 
-  return createElement(
-    "div",
-    { className: `graph-center ${className}`.trim(), ref: containerRef, style: { position: "relative", width: "100%", height: "100%", ...style }, ...rest },
-    createElement(
-      "svg",
-      { className: "edge-layer", style: { position: "absolute", inset: 0, pointerEvents: "auto" }, width: "100%", height: "100%", viewBox: `0 0 ${viewWidth} ${viewHeight}` },
-      createElement(
-        "defs",
-        null,
-        createElement(
-          "marker",
-          {
-            id: "relation-arrow",
-            markerWidth: "8",
-            markerHeight: "8",
-            refX: "7",
-            refY: "3.5",
-            orient: "auto",
-            markerUnits: "strokeWidth",
-          },
-          createElement("path", { d: "M0,0 L0,7 L7,3.5 z", fill: "#ffffff", fillOpacity: "0.78" }),
-        ),
-        createElement(
-          "filter",
-          { id: "relation-soft-glow", x: "-20%", y: "-20%", width: "140%", height: "140%" },
-          createElement("feGaussianBlur", { stdDeviation: "1.1", result: "blur" }),
-          createElement("feColorMatrix", { in: "blur", type: "matrix", values: "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.85 0" }),
-        ),
-      ),
-      ...renderEdges.map((edge) => {
-        const left = edge.sourceNode;
-        const right = edge.targetNode;
-        if (!left || !right) return null;
+        setSvgElementAttributes(nodeElements.halo, {
+          rx: body.haloWidth ? body.haloWidth * 0.5 : Math.max(52, (node.layoutWidth || 220) * 0.32),
+          ry: body.haloHeight ? body.haloHeight * 0.5 : Math.max(26, (node.layoutWidth || 220) * 0.11),
+          fill: "#f3ebdf",
+          fillOpacity: clamp(0.06 + (body.activity || 0) * 0.14 + (isSelected ? 0.06 : 0), 0.03, 0.26),
+          stroke: "#f6f0e7",
+          strokeOpacity: isSelected ? 0.18 : 0.08,
+          strokeWidth: 1,
+          style: `filter: blur(${clamp(depthBlur * 1.2, 0.02, 0.7)}px);`,
+        });
+
+        setSvgElementAttributes(nodeElements.body, {
+          rx: body.width ? body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
+          ry: body.height ? body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
+          fill: node.id === "theory-core-actional-space" ? "#f4d37a" : "#efe3ce",
+          fillOpacity: clamp(0.12 + body.resonance * 0.66 + body.activity * 0.12 + (isSelected ? 0.22 : isNeighbor ? 0.1 : 0), 0.08, 0.99),
+          stroke: "#ffffff",
+          strokeOpacity: clamp(0.1 + body.density * 0.22, 0.04, 0.36),
+          strokeWidth: clamp(0.72 + body.mass * 0.14 + (isSelected ? 0.18 : 0), 0.7, 2.1),
+        });
+
+        setSvgElementAttributes(nodeElements.core, {
+          rx: body.coreWidth ? body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
+          ry: body.coreHeight ? body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
+          fill: "#fffaf0",
+          fillOpacity: clamp(0.1 + body.resonance * 0.4 + (isSelected ? 0.12 : 0), 0.06, 0.82),
+          style: `filter: blur(${clamp(depthBlur * 0.45, 0.01, 0.22)}px);`,
+        });
+
+        nodeElements.particles.forEach((particle, particleIndex) => {
+          const angle = (particleIndex / Math.max(1, Math.min(3, node.concepts?.length || 3))) * Math.PI * 2;
+          setSvgElementAttributes(particle, {
+            cx: Math.cos(angle) * ((body.width || 40) * 0.22),
+            cy: Math.sin(angle) * ((body.height || 18) * 0.34),
+            r: 1.3 + body.activity * 1.1 + (isSelected ? 0.4 : 0),
+            fill: "#ffffff",
+            fillOpacity: clamp(0.18 + body.activity * 0.34 + (isSelected ? 0.18 : 0), 0.1, 0.82),
+          });
+        });
+      }
+
+      for (const [edgeId, edgeElement] of linkElementsRef.current.entries()) {
+        const edge = scene.links.find((candidate) => candidate.id === edgeId);
+        if (!edge) {
+          edgeElement.remove();
+          linkElementsRef.current.delete(edgeId);
+          continue;
+        }
+
+        const left = nodeLookup.get(edge.source?.id || edge.source);
+        const right = nodeLookup.get(edge.target?.id || edge.target);
+        if (!left || !right) {
+          continue;
+        }
+
         const semanticStrength = edge.semanticStrength ?? edge.score ?? edge.weight ?? 0;
         const selectedEdge = selectedNodeId && (left.id === selectedNodeId || right.id === selectedNodeId);
         const leftZ = left.z ?? 1;
@@ -400,86 +445,310 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         const curveX = midpointX + nx * distance * tension;
         const curveY = midpointY + ny * distance * tension * 0.72;
         const d = `M ${left.x} ${left.y} Q ${curveX} ${curveY} ${right.x} ${right.y}`;
-        const alpha = Math.min(0.98, Math.max(0.03, (edge.opacity ?? 0.08) + Math.min(0.56, semanticStrength * 0.2) + Math.min(0.28, (edge.confidence || 0) * 0.26) + (selectedEdge ? 0.24 : 0) - (selectedNodeId && !selectedEdge ? 0.14 : 0)));
-        const strokeWidth = Math.max(0.45, 0.52 + semanticStrength * 0.52 + Math.min(0.6, (edge.confidence || 0) * 0.42) + (selectedEdge ? 0.3 : 0));
-        const blur = clamp(1.42 - semanticStrength * 0.34, 0.1, 1.5);
-        const stroke = edge.type === "wiki" || edge.type === "theory" ? "#c9a227" : edge.type === "category" ? "#ffffff" : "#ffffff";
-        return createElement("path", {
-          key: edge.id || `${edge.source}-${edge.target}`,
-          d,
-          stroke,
-          strokeOpacity: alpha,
-          strokeWidth,
-          fill: "none",
-          strokeLinecap: "round",
-          strokeLinejoin: "round",
-          markerEnd: "url(#relation-arrow)",
-          filter: `url(#relation-soft-glow)`,
-          style: { filter: `blur(${blur}px)`, pointerEvents: "none" },
-        });
-      }).filter(Boolean),
-      ...renderNodes.map((node) => createElement(
-        "g",
-        {
-          key: node.id,
-          transform: `translate(${node.x}, ${node.y + node.depthLift}) scale(${node.depthScale})`,
-          opacity: node.renderOpacity,
-          onClick: (event) => {
-            event.stopPropagation();
-            const nodeId = extractNodeId(node);
-            if (!nodeId) {
-              return;
-            }
 
-            onNodeSelectRef.current?.({
-              ...node,
-              id: nodeId,
-              nodeId,
-            });
-          },
-          style: { pointerEvents: "auto", cursor: "pointer" },
-        },
-        createElement("ellipse", {
-          cx: 0,
-          cy: 0,
-          rx: node.body?.haloWidth ? node.body.haloWidth * 0.5 : Math.max(52, (node.layoutWidth || 220) * 0.32),
-          ry: node.body?.haloHeight ? node.body.haloHeight * 0.5 : Math.max(26, (node.layoutWidth || 220) * 0.11),
+        setSvgElementAttributes(edgeElement, {
+          d,
+          stroke: edge.type === "wiki" || edge.type === "theory" ? "#c9a227" : "#ffffff",
+          strokeOpacity: Math.min(0.98, Math.max(0.03, (edge.opacity ?? 0.06) + Math.min(0.48, semanticStrength * 0.24) + Math.min(0.24, (edge.confidence || 0) * 0.2) + (selectedEdge ? 0.28 : 0) - (selectedNodeId && !selectedEdge ? 0.16 : 0))),
+          strokeWidth: Math.max(0.42, 0.46 + semanticStrength * 0.58 + Math.min(0.5, (edge.confidence || 0) * 0.38) + (selectedEdge ? 0.36 : 0)),
+          style: `filter: blur(${clamp(1.42 - semanticStrength * 0.34, 0.1, 1.5)}px);`,
+        });
+      }
+    });
+
+    simulationRef.current = simulation;
+    centerForceRef.current = centerForce;
+    linkForceRef.current = linkForce;
+    collisionForceRef.current = collisionForce;
+    nodesLayerRef.current = nodesLayer;
+    linksLayerRef.current = linksLayer;
+
+    return () => {
+      simulation.stop();
+      simulationRef.current = null;
+      centerForceRef.current = null;
+      linkForceRef.current = null;
+      collisionForceRef.current = null;
+      nodeElementsRef.current.clear();
+      linkElementsRef.current.clear();
+      if (svg) {
+        svg.innerHTML = "";
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    const simulation = simulationRef.current;
+    if (!svg || !simulation || !linkForceRef.current || !centerForceRef.current || !collisionForceRef.current) {
+      return;
+    }
+
+    const hasRealNodes = (state.nodes || []).length > 0;
+    const sourceNodes = hasRealNodes ? (state.nodes || []) : (debugNodes || []);
+    const sourceEdges = hasRealNodes ? (state.edges || []) : (debugEdges || []);
+    const width = Math.max(320, state.viewport?.width || 960);
+    const height = Math.max(240, state.viewport?.height || 560);
+    const selectedNodeId = state.selectedNode || null;
+
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+    const existingNodes = new Map(sceneRef.current.nodes.map((node) => [node.id, node]));
+    const mergedNodes = sourceNodes.map((snapshot, index) => {
+      const nodeId = extractNodeId(snapshot) || `node-${index}`;
+      const existing = existingNodes.get(nodeId);
+      const fallbackAngle = (index / Math.max(1, sourceNodes.length)) * Math.PI * 2;
+      const fallbackRadius = Math.min(width, height) * 0.26;
+      const nextX = Number.isFinite(snapshot.x) ? snapshot.x : width * 0.5 + Math.cos(fallbackAngle) * fallbackRadius;
+      const nextY = Number.isFinite(snapshot.y) ? snapshot.y : height * 0.5 + Math.sin(fallbackAngle) * fallbackRadius;
+
+      if (existing) {
+        Object.assign(existing, snapshot, {
+          id: nodeId,
+          x: Number.isFinite(existing.x) ? existing.x : nextX,
+          y: Number.isFinite(existing.y) ? existing.y : nextY,
+          vx: Number.isFinite(existing.vx) ? existing.vx : 0,
+          vy: Number.isFinite(existing.vy) ? existing.vy : 0,
+          semanticPhysics: snapshot.semanticPhysics || existing.semanticPhysics || {},
+        });
+        return existing;
+      }
+
+      return {
+        ...snapshot,
+        id: nodeId,
+        x: nextX,
+        y: nextY,
+        vx: Number.isFinite(snapshot.vx) ? snapshot.vx : 0,
+        vy: Number.isFinite(snapshot.vy) ? snapshot.vy : 0,
+        semanticPhysics: snapshot.semanticPhysics || {},
+      };
+    });
+
+    const nodeLookup = new Map(mergedNodes.map((node) => [node.id, node]));
+    const activityMap = createFeedActivityIndex({ ...state, nodes: mergedNodes });
+
+    const mergedLinks = sourceEdges
+      .slice(0, 900)
+      .map((edge, edgeIndex) => {
+        const sourceNode = resolveEndpoint(edge.source ?? edge.leftId ?? edge.sourceId ?? edge.leftIndex, nodeLookup, mergedNodes);
+        const targetNode = resolveEndpoint(edge.target ?? edge.rightId ?? edge.targetId ?? edge.rightIndex, nodeLookup, mergedNodes);
+        if (!sourceNode || !targetNode) {
+          return null;
+        }
+
+        return {
+          ...edge,
+          id: edge.id || `edge-${edgeIndex}`,
+          source: sourceNode,
+          target: targetNode,
+          sourceNode,
+          targetNode,
+        };
+      })
+      .filter(Boolean);
+
+    const neighborIds = new Set();
+    if (selectedNodeId) {
+      for (const edge of mergedLinks) {
+        const sourceId = String(edge.source?.id || edge.sourceNode?.id || edge.source || "");
+        const targetId = String(edge.target?.id || edge.targetNode?.id || edge.target || "");
+        if (sourceId === selectedNodeId) {
+          neighborIds.add(targetId);
+        }
+        if (targetId === selectedNodeId) {
+          neighborIds.add(sourceId);
+        }
+      }
+    }
+
+    sceneRef.current = {
+      nodes: mergedNodes,
+      links: mergedLinks,
+      width,
+      height,
+      selectedNodeId,
+      activityMap,
+      neighborIds,
+    };
+
+    mergedNodes.forEach((node) => {
+      if (!nodeElementsRef.current.has(node.id)) {
+        const visual = createNodeVisual(node.id, (nodeId) => {
+          onNodeSelectRef.current?.({ ...nodeLookup.get(nodeId), id: nodeId, nodeId });
+        });
+        nodeElementsRef.current.set(node.id, visual);
+        nodesLayerRef.current?.appendChild(visual.group);
+      }
+    });
+
+    for (const [nodeId, visual] of nodeElementsRef.current.entries()) {
+      if (!nodeLookup.has(nodeId)) {
+        visual.group.remove();
+        nodeElementsRef.current.delete(nodeId);
+      }
+    }
+
+    mergedLinks.forEach((edge) => {
+      if (!linkElementsRef.current.has(edge.id)) {
+        const visual = createLinkVisual();
+        linkElementsRef.current.set(edge.id, visual);
+        linksLayerRef.current?.appendChild(visual);
+      }
+    });
+
+    for (const [edgeId, visual] of linkElementsRef.current.entries()) {
+      if (!mergedLinks.some((edge) => edge.id === edgeId)) {
+        visual.remove();
+        linkElementsRef.current.delete(edgeId);
+      }
+    }
+
+    centerForceRef.current.x(width * 0.5).y(height * 0.5);
+    linkForceRef.current.links(mergedLinks);
+    collisionForceRef.current.radius((node) => {
+      const physics = node.semanticPhysics || {};
+      const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
+      return Math.max(44, physics.collisionRadius || (node.layoutWidth || 220) * (0.18 + activity * 0.14));
+    });
+    simulation.nodes(mergedNodes);
+    simulation.alphaTarget(0.12).restart();
+
+    const renderScene = () => {
+      const scene = sceneRef.current;
+      const { nodes, links, selectedNodeId: currentSelectedNodeId, neighborIds: currentNeighborIds, activityMap: currentActivityMap, width: currentWidth, height: currentHeight } = scene;
+      const nodeLookup = new Map(nodes.map((node) => [node.id, node]));
+
+      for (const node of nodes) {
+        const visual = nodeElementsRef.current.get(node.id);
+        if (!visual) {
+          continue;
+        }
+
+        const activity = clamp((currentActivityMap.get(node.id) || 0) / 3.2, 0, 1);
+        const distanceRatio = clamp(Math.hypot((node.x || currentWidth * 0.5) - currentWidth * 0.5, (node.y || currentHeight * 0.5) - currentHeight * 0.5) / Math.max(120, Math.hypot(currentWidth * 0.5, currentHeight * 0.5)), 0, 1);
+        const depthState = projectNodeDepth({ ...node, semanticActivity: activity }, currentWidth, currentHeight);
+        const body = projectNodeBody({ ...node, semanticActivity: activity, distanceRatio });
+        const isSelected = currentSelectedNodeId && node.id === currentSelectedNodeId;
+        const isNeighbor = currentSelectedNodeId && currentNeighborIds.has(node.id);
+        const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
+        const focusBoost = isSelected ? 0.42 : isNeighbor ? 0.18 : 0;
+        const weakFade = resonance < 0.22 ? 0.7 : resonance < 0.45 ? 0.88 : 1;
+
+        setSvgElementAttributes(visual.group, {
+          transform: `translate(${node.x || 0}, ${((node.y || 0) + depthState.depthLift) || 0}) scale(${clamp(depthState.depthScale + focusBoost, 0.5, 2)})`,
+          opacity: clamp((node.atmosphericOpacity ?? node.opacity ?? 0.82) * weakFade * (0.18 + activity * 0.82) * (isSelected ? 1 : isNeighbor ? 0.94 : 0.74), 0.04, 1),
+          "data-selected": isSelected ? "true" : "false",
+          "data-neighbor": isNeighbor ? "true" : "false",
+        });
+
+        setSvgElementAttributes(visual.orbit, {
+          rx: body.width ? body.width * 0.6 : Math.max(58, (node.layoutWidth || 220) * 0.34),
+          ry: body.height ? body.height * 0.7 : Math.max(24, (node.layoutWidth || 220) * 0.1),
+          stroke: isSelected ? "#f6f0e7" : isNeighbor ? "#d9caa8" : "#ffffff",
+          strokeOpacity: isSelected ? 0.28 : isNeighbor ? 0.16 : 0.08,
+          strokeWidth: isSelected ? 1.6 : isNeighbor ? 1.2 : 0.9,
+          strokeDasharray: resonance < 0.3 ? "3 7" : null,
+        });
+
+        setSvgElementAttributes(visual.halo, {
+          rx: body.haloWidth ? body.haloWidth * 0.5 : Math.max(52, (node.layoutWidth || 220) * 0.32),
+          ry: body.haloHeight ? body.haloHeight * 0.5 : Math.max(26, (node.layoutWidth || 220) * 0.11),
           fill: "#f3ebdf",
-          fillOpacity: clamp(0.08 + (node.body?.activity || 0) * 0.14, 0.04, 0.24),
+          fillOpacity: clamp(0.06 + (body.activity || 0) * 0.14 + (isSelected ? 0.06 : 0), 0.03, 0.26),
           stroke: "#f6f0e7",
-          strokeOpacity: 0.08,
+          strokeOpacity: isSelected ? 0.18 : 0.08,
           strokeWidth: 1,
-          style: { filter: `blur(${clamp((node.depthBlur || 0.12) * 1.2, 0.02, 0.7)}px)` },
-        }),
-        createElement("ellipse", {
-          cx: 0,
-          cy: 0,
-          rx: node.body?.width ? node.body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
-          ry: node.body?.height ? node.body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
+          style: `filter: blur(${clamp(depthState.depthBlur * 1.2, 0.02, 0.7)}px);`,
+        });
+
+        setSvgElementAttributes(visual.body, {
+          rx: body.width ? body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
+          ry: body.height ? body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
           fill: node.id === "theory-core-actional-space" ? "#f4d37a" : "#efe3ce",
-          fillOpacity: clamp(0.2 + (node.body?.resonance || 0) * 0.54 + (node.body?.activity || 0) * 0.18 + (node.isSelected ? 0.16 : node.isNeighbor ? 0.08 : 0), 0.12, 0.98),
+          fillOpacity: clamp(0.12 + body.resonance * 0.66 + body.activity * 0.12 + (isSelected ? 0.22 : isNeighbor ? 0.1 : 0), 0.08, 0.99),
           stroke: "#ffffff",
-          strokeOpacity: clamp(0.1 + (node.body?.density || 0) * 0.22, 0.04, 0.36),
-          strokeWidth: clamp(0.7 + (node.body?.mass || 1) * 0.1, 0.7, 1.8),
-        }),
-        createElement("ellipse", {
-          cx: -Math.max(4, (node.body?.width || 60) * 0.08),
-          cy: -Math.max(2, (node.body?.height || 24) * 0.08),
-          rx: node.body?.coreWidth ? node.body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
-          ry: node.body?.coreHeight ? node.body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
+          strokeOpacity: clamp(0.1 + body.density * 0.22, 0.04, 0.36),
+          strokeWidth: clamp(0.72 + body.mass * 0.14 + (isSelected ? 0.18 : 0), 0.7, 2.1),
+        });
+
+        setSvgElementAttributes(visual.core, {
+          rx: body.coreWidth ? body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
+          ry: body.coreHeight ? body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
           fill: "#fffaf0",
-          fillOpacity: clamp(0.16 + (node.body?.resonance || 0) * 0.34 + (node.isSelected ? 0.08 : 0), 0.08, 0.78),
-          style: { filter: `blur(${clamp((node.depthBlur || 0.12) * 0.45, 0.01, 0.22)}px)` },
-        }),
-        ...(Array.isArray(node.concepts) ? node.concepts.slice(0, 3).map((concept, conceptIndex) => createElement("circle", {
-          key: `${node.id}-particle-${conceptIndex}`,
-          cx: Math.cos((conceptIndex / Math.max(1, Math.min(3, node.concepts.length))) * Math.PI * 2) * ((node.body?.width || 40) * 0.22),
-          cy: Math.sin((conceptIndex / Math.max(1, Math.min(3, node.concepts.length))) * Math.PI * 2) * ((node.body?.height || 18) * 0.34),
-          r: 1.5 + (node.body?.activity || 0) * 1.2,
-          fill: "#ffffff",
-          fillOpacity: clamp(0.32 + (node.body?.activity || 0) * 0.28, 0.12, 0.7),
-        })) : []),
-      )),
-    ),
+          fillOpacity: clamp(0.1 + body.resonance * 0.4 + (isSelected ? 0.12 : 0), 0.06, 0.82),
+          style: `filter: blur(${clamp(depthState.depthBlur * 0.45, 0.01, 0.22)}px);`,
+        });
+
+        visual.particles.forEach((particle, particleIndex) => {
+          const angle = (particleIndex / Math.max(1, Math.min(3, node.concepts?.length || 3))) * Math.PI * 2;
+          setSvgElementAttributes(particle, {
+            cx: Math.cos(angle) * ((body.width || 40) * 0.22),
+            cy: Math.sin(angle) * ((body.height || 18) * 0.34),
+            r: 1.3 + body.activity * 1.1 + (isSelected ? 0.4 : 0),
+            fill: "#ffffff",
+            fillOpacity: clamp(0.18 + body.activity * 0.34 + (isSelected ? 0.18 : 0), 0.1, 0.82),
+          });
+        });
+      }
+
+      for (const [edgeId, visual] of linkElementsRef.current.entries()) {
+        const edge = links.find((candidate) => candidate.id === edgeId);
+        if (!edge) {
+          continue;
+        }
+
+        const left = nodeLookup.get(edge.source?.id || edge.sourceNode?.id || edge.source);
+        const right = nodeLookup.get(edge.target?.id || edge.targetNode?.id || edge.target);
+        if (!left || !right) {
+          continue;
+        }
+
+        const semanticStrength = edge.semanticStrength ?? edge.score ?? edge.weight ?? 0;
+        const selectedEdge = currentSelectedNodeId && (left.id === currentSelectedNodeId || right.id === currentSelectedNodeId);
+        const leftZ = left.z ?? 1;
+        const rightZ = right.z ?? 1;
+        const depthSpan = Math.abs(leftZ - rightZ);
+        const midpointX = (left.x + right.x) * 0.5;
+        const midpointY = (left.y + right.y) * 0.5;
+        const dx = right.x - left.x;
+        const dy = right.y - left.y;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        const nx = -dy / distance;
+        const ny = dx / distance;
+        const tension = clamp(0.04 + semanticStrength * 0.12 + depthSpan * 0.08 + Math.min(0.26, (edge.confidence || 0) * 0.18), 0.04, 0.52);
+        const curveX = midpointX + nx * distance * tension;
+        const curveY = midpointY + ny * distance * tension * 0.72;
+        const d = `M ${left.x} ${left.y} Q ${curveX} ${curveY} ${right.x} ${right.y}`;
+
+        setSvgElementAttributes(visual, {
+          d,
+          stroke: edge.type === "wiki" || edge.type === "theory" ? "#c9a227" : "#ffffff",
+          strokeOpacity: Math.min(0.98, Math.max(0.03, (edge.opacity ?? 0.06) + Math.min(0.48, semanticStrength * 0.24) + Math.min(0.24, (edge.confidence || 0) * 0.2) + (selectedEdge ? 0.28 : 0) - (currentSelectedNodeId && !selectedEdge ? 0.16 : 0))),
+          strokeWidth: Math.max(0.42, 0.46 + semanticStrength * 0.58 + Math.min(0.5, (edge.confidence || 0) * 0.38) + (selectedEdge ? 0.36 : 0)),
+          style: `filter: blur(${clamp(1.42 - semanticStrength * 0.34, 0.1, 1.5)}px);`,
+        });
+      }
+    };
+
+    renderSceneRef.current = renderScene;
+    renderScene();
+
+    return () => {
+      renderSceneRef.current = null;
+    };
+  }, [debugEdges, debugNodes, state.edges, state.nodes, state.selectedNode, state.viewport?.height, state.viewport?.width]);
+
+  return createElement(
+    "div",
+    { className: `graph-center ${className}`.trim(), ref: containerRef, style: { position: "relative", width: "100%", height: "100%", ...style }, ...rest },
+    createElement("svg", {
+      ref: svgRef,
+      className: "edge-layer",
+      style: { position: "absolute", inset: 0, pointerEvents: "auto" },
+      width: "100%",
+      height: "100%",
+      viewBox: `0 0 ${Math.max(320, state.viewport?.width || 960)} ${Math.max(240, state.viewport?.height || 560)}`,
+    }),
   );
 }

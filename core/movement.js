@@ -69,17 +69,19 @@ function targetDepth(node) {
 
 function semanticPhysicsFor(node) {
   const physics = node?.semanticPhysics || {};
+  const resonance = clamp(Number(node?.theoryResonanceScore || 0), 0, 1);
+  const density = clamp(Number(node?.semanticDensity || 0), 0, 1);
   return {
     mass: Number(physics.semanticMass || semanticMass(node)),
-    pull: Number(physics.forcePull || 0.024),
-    damping: Number.isFinite(physics.damping) ? physics.damping : 0.986,
-    collisionRadius: Number(physics.collisionRadius || 84),
-    orbitRadius: Number(physics.orbitRadius || 180),
-    orbitSpeed: Number(physics.orbitSpeed || 0.0012),
-    persistence: Number(physics.persistence || 0.5),
+    pull: Number(physics.forcePull || (0.018 + resonance * 0.052 + density * 0.01)),
+    damping: Number.isFinite(physics.damping) ? physics.damping : clamp(0.974 + resonance * 0.016, 0.972, 0.994),
+    collisionRadius: Number(physics.collisionRadius || (72 + resonance * 46 + density * 18)),
+    orbitRadius: Number(physics.orbitRadius || (220 - resonance * 96 - density * 22)),
+    orbitSpeed: Number(physics.orbitSpeed || (0.0016 - resonance * 0.00092)),
+    persistence: Number(physics.persistence || (0.2 + resonance * 0.76)),
     opacity: Number(physics.opacity || 0.5),
     depth: Number(physics.depth || 1),
-    depthLift: Number(physics.depthLift || 12),
+    depthLift: Number(physics.depthLift || (8 + resonance * 14)),
   };
 }
 
@@ -137,7 +139,7 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
 
     const dx = attractor.x - node.x;
     const dy = attractor.y - node.y;
-    const gravity = physics.pull + resonance * 0.0008 + density * 0.00052;
+    const gravity = physics.pull + resonance * 0.00072 + density * 0.00042;
 
     node.vx += (dx * gravity) / mass;
     node.vy += (dy * gravity) / mass;
@@ -145,11 +147,12 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
     const orbitSeed = Number(node.orbitSeed || node.index || index) * 0.91;
     node.orbitPhase = Number.isFinite(node.orbitPhase) ? node.orbitPhase : orbitSeed;
     node.orbitPhase += physics.orbitSpeed * (0.86 + (1 - resonance) * 0.72);
-    const orbitRadius = physics.orbitRadius * (0.82 + density * 0.16);
+    const orbitRadius = physics.orbitRadius * (0.72 + density * 0.22 - resonance * 0.12);
     const orbitTargetX = attractor.x + Math.cos(node.orbitPhase) * orbitRadius;
     const orbitTargetY = attractor.y + Math.sin(node.orbitPhase) * orbitRadius * 0.78;
-    node.vx += (orbitTargetX - node.x) * 0.00042;
-    node.vy += (orbitTargetY - node.y) * 0.00042;
+    const orbitForce = 0.00028 + (1 - resonance) * 0.00034;
+    node.vx += (orbitTargetX - node.x) * orbitForce;
+    node.vy += (orbitTargetY - node.y) * orbitForce;
 
     // Soft structural reinforcement from strong relations only.
     for (let otherIndex = 0; otherIndex < safeFragments.length; otherIndex += 1) {
@@ -174,10 +177,10 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
 
     // Slow architectural drift, not particle jitter.
     const driftPhase = Number(node?.driftPhase || node?.sequenceIndex || index) * 0.32;
-    node.vx += Math.sin(time * 0.000032 + driftPhase) * (0.00048 - resonance * 0.0002);
-    node.vy += Math.cos(time * 0.000029 + driftPhase) * (0.00042 - resonance * 0.00016);
+    node.vx += Math.sin(time * 0.000032 + driftPhase) * (0.00054 - resonance * 0.00028);
+    node.vy += Math.cos(time * 0.000029 + driftPhase) * (0.00048 - resonance * 0.00022);
 
-    const damping = clamp(physics.damping - resonance * 0.004 - temporalFormation * 0.003, 0.944, 0.994);
+    const damping = clamp(physics.damping - resonance * 0.006 - temporalFormation * 0.003, 0.936, 0.995);
     node.vx *= damping;
     node.vy *= damping;
 
@@ -187,13 +190,13 @@ export function updateFragments(fragments, relations, viewport, time, delta) {
     const desiredDepth = targetDepth(node);
     node.z = clamp((node.z ?? desiredDepth) + (desiredDepth - (node.z ?? desiredDepth)) * (0.08 + resonance * 0.03), 0, 2);
     node.depthLayer = node.z < 0.7 ? 0 : node.z > 1.35 ? 2 : 1;
-    node.sizeScale = clamp(0.72 + resonance * 0.42 + density * 0.16 - node.z * 0.08, 0.7, 1.68);
-    node.depthBlur = clamp(0.5 - resonance * 0.14 + (1 - density) * 0.12 + Math.max(0, node.z - 1) * 0.08, 0.04, 0.48);
+    node.sizeScale = clamp(0.62 + resonance * 0.58 + density * 0.2 - node.z * 0.06, 0.6, 1.88);
+    node.depthBlur = clamp(0.56 - resonance * 0.2 + (1 - density) * 0.1 + Math.max(0, node.z - 1) * 0.1, 0.04, 0.52);
 
     const relevance = clamp(resonance * 0.66 + density * 0.34, 0, 1);
     const ageFade = 1 - temporalFormation * 0.14;
-    node.opacity = clamp(0.16 + relevance * 0.76, 0.08, 1) * ageFade;
-    node.atmosphericOpacity = clamp(node.opacity * (0.78 + relevance * 0.26), 0.12, 1);
+    node.opacity = clamp(0.1 + relevance * 0.84, 0.05, 1) * ageFade;
+    node.atmosphericOpacity = clamp(node.opacity * (0.74 + relevance * 0.3), 0.08, 1);
     node.persistence = physics.persistence;
 
     node.x = clamp(node.x, 92, width - 92);
