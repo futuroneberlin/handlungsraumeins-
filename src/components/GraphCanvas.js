@@ -196,6 +196,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
   const hasRealNodes = (state.nodes || []).length > 0;
   const baseNodes = hasRealNodes ? (state.nodes || []) : (debugNodes || []);
   const baseEdges = hasRealNodes ? (state.edges || []) : (debugEdges || []);
+  const selectedNodeId = state.selectedNode || null;
 
   const simulation = useMemo(() => {
     const width = Math.max(320, state.viewport?.width || 0 || 960);
@@ -243,6 +244,20 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       })
       .filter(Boolean);
 
+    const neighborIds = new Set();
+    if (selectedNodeId) {
+      for (const edge of links) {
+        const sourceId = String(edge.source || edge.sourceNode?.id || "");
+        const targetId = String(edge.target || edge.targetNode?.id || "");
+        if (sourceId === selectedNodeId) {
+          neighborIds.add(targetId);
+        }
+        if (targetId === selectedNodeId) {
+          neighborIds.add(sourceId);
+        }
+      }
+    }
+
     const linkForce = forceLink(links)
       .id((node) => node.id)
       .distance((edge) => {
@@ -285,17 +300,22 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         const baseOpacity = clamp(node.atmosphericOpacity ?? node.opacity ?? 0.82, 0.2, 1);
         const body = projectNodeBody({ ...node, semanticActivity: activity, distanceRatio });
         const physics = node.semanticPhysics || {};
+        const isSelected = selectedNodeId && node.id === selectedNodeId;
+        const isNeighbor = selectedNodeId && neighborIds.has(node.id);
+        const focusBoost = isSelected ? 0.28 : isNeighbor ? 0.14 : 0;
 
         return {
           ...node,
-          depthScale,
+          depthScale: clamp(depthScale + focusBoost, 0.68, 1.7),
           distanceRatio,
           depthLift,
           depthBlur,
           body,
           semanticActivity: activity,
-          renderOpacity: clamp(baseOpacity * (0.32 + activity * 0.68) * (0.96 - Math.min(0.28, Math.max(0, ((node.z ?? physics.depth) || 1) - 1) * 0.12)), 0.08, 1),
+          renderOpacity: clamp(baseOpacity * (0.26 + activity * 0.74) * (isSelected ? 1 : isNeighbor ? 0.92 : 0.78) * (0.96 - Math.min(0.28, Math.max(0, ((node.z ?? physics.depth) || 1) - 1) * 0.12)), 0.06, 1),
           orbitOpacity: clamp(0.18 + (physics.persistence || 0.4) * 0.62, 0.12, 0.9),
+          isSelected,
+          isNeighbor,
         };
       })
       .sort((left, right) => (right.z ?? 0) - (left.z ?? 0) || right.distanceRatio - left.distanceRatio);
@@ -365,6 +385,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         const right = edge.targetNode;
         if (!left || !right) return null;
         const semanticStrength = edge.semanticStrength ?? edge.score ?? edge.weight ?? 0;
+        const selectedEdge = selectedNodeId && (left.id === selectedNodeId || right.id === selectedNodeId);
         const leftZ = left.z ?? 1;
         const rightZ = right.z ?? 1;
         const depthSpan = Math.abs(leftZ - rightZ);
@@ -379,8 +400,8 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         const curveX = midpointX + nx * distance * tension;
         const curveY = midpointY + ny * distance * tension * 0.72;
         const d = `M ${left.x} ${left.y} Q ${curveX} ${curveY} ${right.x} ${right.y}`;
-        const alpha = Math.min(0.95, Math.max(0.03, (edge.opacity ?? 0.08) + Math.min(0.56, semanticStrength * 0.2) + Math.min(0.28, (edge.confidence || 0) * 0.26)));
-        const strokeWidth = Math.max(0.45, 0.52 + semanticStrength * 0.52 + Math.min(0.6, (edge.confidence || 0) * 0.42));
+        const alpha = Math.min(0.98, Math.max(0.03, (edge.opacity ?? 0.08) + Math.min(0.56, semanticStrength * 0.2) + Math.min(0.28, (edge.confidence || 0) * 0.26) + (selectedEdge ? 0.24 : 0) - (selectedNodeId && !selectedEdge ? 0.14 : 0)));
+        const strokeWidth = Math.max(0.45, 0.52 + semanticStrength * 0.52 + Math.min(0.6, (edge.confidence || 0) * 0.42) + (selectedEdge ? 0.3 : 0));
         const blur = clamp(1.42 - semanticStrength * 0.34, 0.1, 1.5);
         const stroke = edge.type === "wiki" || edge.type === "theory" ? "#c9a227" : edge.type === "category" ? "#ffffff" : "#ffffff";
         return createElement("path", {
@@ -436,7 +457,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
           rx: node.body?.width ? node.body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
           ry: node.body?.height ? node.body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
           fill: node.id === "theory-core-actional-space" ? "#f4d37a" : "#efe3ce",
-          fillOpacity: clamp(0.2 + (node.body?.resonance || 0) * 0.54 + (node.body?.activity || 0) * 0.18, 0.12, 0.96),
+          fillOpacity: clamp(0.2 + (node.body?.resonance || 0) * 0.54 + (node.body?.activity || 0) * 0.18 + (node.isSelected ? 0.16 : node.isNeighbor ? 0.08 : 0), 0.12, 0.98),
           stroke: "#ffffff",
           strokeOpacity: clamp(0.1 + (node.body?.density || 0) * 0.22, 0.04, 0.36),
           strokeWidth: clamp(0.7 + (node.body?.mass || 1) * 0.1, 0.7, 1.8),
@@ -447,7 +468,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
           rx: node.body?.coreWidth ? node.body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
           ry: node.body?.coreHeight ? node.body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
           fill: "#fffaf0",
-          fillOpacity: clamp(0.16 + (node.body?.resonance || 0) * 0.34, 0.08, 0.72),
+          fillOpacity: clamp(0.16 + (node.body?.resonance || 0) * 0.34 + (node.isSelected ? 0.08 : 0), 0.08, 0.78),
           style: { filter: `blur(${clamp((node.depthBlur || 0.12) * 0.45, 0.01, 0.22)}px)` },
         }),
         ...(Array.isArray(node.concepts) ? node.concepts.slice(0, 3).map((concept, conceptIndex) => createElement("circle", {

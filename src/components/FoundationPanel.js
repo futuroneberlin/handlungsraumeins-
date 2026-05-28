@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { SemanticNodeCard } from "./SemanticNodeCard.js";
+import { SemanticInspector } from "./SemanticInspector.js";
 
 export function FoundationPanel({ categories = [], stabilizations = [], selectedInspector = null, onNodeSelect, nodeCount = 0, edgeCount = 0, className = "", style, ...rest }) {
   const entries = Array.isArray(stabilizations) && stabilizations.length
@@ -24,6 +25,14 @@ export function FoundationPanel({ categories = [], stabilizations = [], selected
       createElement("span", null, `nodes ${nodeCount}`),
       createElement("span", null, `edges ${edgeCount}`),
     ),
+    selectedInspector ? createElement(SemanticInspector, {
+      title: selectedInspector.title,
+      type: selectedInspector.type,
+      summary: selectedInspector.summary,
+      categories: selectedInspector.categories,
+      links: selectedInspector.links,
+      relations: selectedInspector.relations,
+    }) : null,
     entries.length ? entries.map((entry) => createElement(SemanticNodeCard, {
       key: entry.id,
       title: entry.conceptName,

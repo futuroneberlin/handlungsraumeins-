@@ -81,6 +81,13 @@ export function getNodeSummary(node, state) {
   const resonance = theoryResonanceProfile(node);
   const ontology = evaluateNodeTheoryResonance(node, { minScore: 1.7 });
   const conceptSignals = collectConceptSignals(node);
+  const dimensions = ontology.activatedDimensions || [];
+  const theorySentence = dimensions.length
+    ? `Why it fits the theory: ${dimensions.slice(0, 4).join(" · ")} are active in the article's language and relation pattern.`
+    : "Why it fits the theory: participation, temporality, embodiment, and spatial transformation are still structurally present in the fragment.";
+  const sculpturalSentence = node?.semanticPhysics
+    ? `Spatial condition: the fragment condenses into a body with mass ${node.semanticPhysics.semanticMass || 1}, orbit ${node.semanticPhysics.orbitRadius || 0}, and persistence ${node.semanticPhysics.persistence || 0}.`
+    : "Spatial condition: the fragment condenses toward a relational sculptural field.";
 
   const matchedWiki = (state?.wikiEntries || []).find((entry) => {
     const title = String(entry.title || "").toLowerCase();
@@ -105,8 +112,8 @@ export function getNodeSummary(node, state) {
     ...conceptSignals,
     ...sourceSignals,
     ...resonance.resonanceTerms,
-    ...(ontology.activatedDimensions || []),
-  ], resonance.statement);
+    ...dimensions,
+  ], `${resonance.statement} ${theorySentence} ${sculpturalSentence}`);
 }
 
 export function getSelectedNodeDetails(state) {
@@ -132,10 +139,10 @@ export function getSelectedNodeDetails(state) {
     relations: relatedEdges.map((edge) => ({
       id: edge.id,
       label: edge.label || edge.type || "relation",
-      explanation: edge.explanation || stabilizeTheoryStatement([...(edge.sharedConcepts || []), ...(edge.sharedTheorySignals || []), ...(edge.sharedKeywords || []), ...(edge.sharedCategories || []), ...(edge.sharedLinks || [])], describeEdge(edge)),
+      explanation: edge.explanation || stabilizeTheoryStatement([...(edge.sharedConcepts || []), ...(edge.sharedTheorySignals || []), ...(edge.theoryDimensions || [])], describeEdge(edge)),
       confidence: Math.round((edge.confidence ?? edge.score ?? 1) * 100),
       weight: edge.weight ?? edge.score ?? 1,
-      evidence: Array.from(new Set([...(edge.sharedConcepts || []), ...(edge.keywords || []), ...(edge.sharedCategories || []), ...(edge.sharedLinks || []), ...(edge.sharedTheorySignals || [])])).slice(0, 4),
+      evidence: Array.from(new Set([...(edge.sharedConcepts || []), ...(edge.sharedTheorySignals || []), ...(edge.theoryDimensions || [])])).slice(0, 4),
       kind: edge.type || "semantic",
     })),
   };
@@ -202,31 +209,21 @@ export function getTheoryStabilizationEntries(state) {
 
     const dimensions = ontology.activatedDimensions.slice(0, 3);
     const why = dimensions.length
-      ? `Warum stabilisiert: ${dimensions.join(" + ")}.`
-      : "Warum stabilisiert: wiederholte relationale Aktivierung im Theorie-Feld.";
-    const transformed = "Transformation: Fragmentmaterial wurde aus deskriptiver Sprache in eine prozessuale Handlungsstruktur überführt.";
-    const condition = "Skulpturale Bedingung: ein relationales Erfahrungsfeld mit zeitlicher Verdichtung und kollektiver Aktivierung.";
+      ? `Why it stabilized: ${dimensions.join(" + ")} activated enough shared theory pressure to hold the fragment in place.`
+      : "Why it stabilized: repeated relational activation condensed the fragment into a readable field.";
+    const transformed = `Transformation: ${category.label || conceptName} moved from description toward process, relation, and spatial action.`;
+    const condition = "Sculptural condition: a volumetric cluster formed through persistence, attraction, and slow release of weaker material.";
 
     const explanation = `${stabilizationStatement} ${why} ${transformed} ${condition}`;
 
-    let mapping = "Mapped to Actional Space: participation as structure and temporal emergence of form.";
-    const lower = stabilizationStatement.toLowerCase();
-    if (lower.includes("temporal") || lower.includes("process")) {
-      mapping = "Mapped to Actional Space: temporality structures how fragments become form.";
-    } else if (lower.includes("spatial") || lower.includes("space")) {
-      mapping = "Mapped to Actional Space: spatial interaction organizes semantic material into readable tension.";
-    } else if (lower.includes("participation") || lower.includes("embodied")) {
-      mapping = "Mapped to Actional Space: participation collapses subject/object distance through embodied relation.";
-    } else if (lower.includes("transform")) {
-      mapping = "Mapped to Actional Space: transformation converts linguistic fragments into stabilized spatial meaning.";
-    }
+    const mapping = `Actional Space mapping: ${dimensions.join(" + ") || "participation + temporality + embodiment"}.`;
 
     return {
       id: `stabilization-${category.id}`,
       conceptName,
       explanation,
       linkedFragments: linkedNodes.map((node) => node.semanticLabel || node.title || node.keyword || node.text).filter(Boolean),
-      mapping: `${mapping} Theory Relation: ${dimensions.join(" + ") || "Participation + Interaction + Transformation"}`,
+      mapping,
     };
   }).filter(Boolean).filter((entry) => entry.linkedFragments.length >= 2);
 }

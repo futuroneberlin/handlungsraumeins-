@@ -1,6 +1,28 @@
 import { evaluateTheoryResonance } from "../core/theoryModel.js";
 
 const DEFAULT_ENDPOINT = "https://en.wikipedia.org/w/api.php";
+const REST_SUMMARY_ENDPOINT = "https://en.wikipedia.org/api/rest_v1/page/summary/";
+
+const ALLOWED_THEME_TERMS = [
+  "joseph beuys",
+  "social sculpture",
+  "process art",
+  "participatory art",
+  "relational aesthetics",
+  "architecture",
+  "space",
+  "embodiment",
+  "temporality",
+  "collective practice",
+  "aesthetic experience",
+  "john dewey",
+  "georg w bertram",
+  "sculpture",
+  "performance",
+  "ritual",
+  "urban practice",
+  "spatial theory",
+];
 
 const NOISE_PATTERNS = [
   /^articles with /i,
@@ -56,6 +78,15 @@ function isConceptualText(value) {
   return !/\b(?:edit|citation|template|stub|disambiguation|maintenance|wikipedia)\b/i.test(text);
 }
 
+function matchesAllowedTheme(value) {
+  const normalized = normalizeTerm(value).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return ALLOWED_THEME_TERMS.some((term) => normalized.includes(term));
+}
+
 function toConceptKeywords(title, summary = "", categories = []) {
   const words = normalizeTerm(`${title} ${summary} ${categories.join(" ")}`)
     .toLowerCase()
@@ -96,6 +127,22 @@ async function fetchJson(url) {
   return response.json();
 }
 
+async function fetchRestSummary(title) {
+  const url = `${REST_SUMMARY_ENDPOINT}${encodeURIComponent(title)}`;
+  const data = await fetchJson(url);
+  if (!data) {
+    return null;
+  }
+
+  return {
+    title: data.title || title,
+    summary: normalizeTerm(data.extract || data.description || ""),
+    excerpt: normalizeTerm(data.extract || data.description || ""),
+    pageid: data.pageid,
+    url: data.content_urls?.desktop?.page || data.content_urls?.mobile?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent((data.title || title).replace(/\s+/g, "_"))}`,
+  };
+}
+
 async function resolveWikipediaTitle(term) {
   const searchUrl = `${DEFAULT_ENDPOINT}?action=query&list=search&srsearch=${encodeURIComponent(term)}&srlimit=1&format=json&origin=*`;
   const data = await fetchJson(searchUrl);
@@ -118,6 +165,7 @@ export async function fetchWikipediaEntry(term) {
   }
 
   const title = await resolveWikipediaTitle(query);
+  const restSummary = await fetchRestSummary(title);
   const detailUrl = `${DEFAULT_ENDPOINT}?action=query&titles=${encodeURIComponent(title)}&prop=extracts|categories|links|info&inprop=url&exintro=1&explaintext=1&cllimit=max&plnamespace=0&pllimit=max&redirects=1&format=json&origin=*`;
   const data = await fetchJson(detailUrl);
   const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
@@ -128,7 +176,7 @@ export async function fetchWikipediaEntry(term) {
 
   const categories = extractListTitles(page.categories, "Category:").slice(0, 12);
   const internalLinks = extractListTitles(page.links).slice(0, 24);
-  const summary = String(page.extract || "").trim();
+  const summary = normalizeTerm(restSummary?.summary || page.extract || "");
   const excerpt = summary
     .replace(/\s+/g, " ")
     .split(/(?<=[.!?])\s+/)
@@ -146,7 +194,9 @@ export async function fetchWikipediaEntry(term) {
     ...concepts,
   ], { minScore: 1.65 });
 
-  if (resonance.reject && concepts.length < 2) {
+  const allowedThemeHit = matchesAllowedTheme(page.title || title) || matchesAllowedTheme(summary) || categories.some(matchesAllowedTheme) || concepts.some(matchesAllowedTheme);
+
+  if (!allowedThemeHit || (resonance.reject && concepts.length < 2)) {
     return null;
   }
 
@@ -163,7 +213,7 @@ export async function fetchWikipediaEntry(term) {
     theoryDimensions: resonance.activatedDimensions,
     resonanceScore,
     pageid: page.pageid,
-    url: page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent((page.title || title).replace(/\s+/g, "_"))}`,
+    url: restSummary?.url || page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent((page.title || title).replace(/\s+/g, "_"))}`,
   };
 }
 

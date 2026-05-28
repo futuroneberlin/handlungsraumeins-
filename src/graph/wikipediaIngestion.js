@@ -1,68 +1,134 @@
 import { fetchWikipediaEntry } from "../../modules/wikipedia.js";
 import { mergeUniqueStrings, nodeIdentity } from "./graphState.js";
-import { createSemanticFragment, createConceptExcerpt, extractKeywords } from "../../modules/textFragmenter.js";
+import { createConceptExcerpt, extractKeywords } from "../../modules/textFragmenter.js";
 import { curateSemanticSignals, evaluateTheoryResonance } from "../../core/theoryModel.js";
 
-export function buildFeedEntries(corpus) {
-  return (Array.isArray(corpus) ? corpus : []).flatMap((entry) => {
-    const text = String(entry.text || "");
-    const fragments = text
-      .split(/(?<=[.!?])\s+/)
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .slice(0, 4);
+const ALLOWED_THEME_TERMS = [
+  "joseph beuys",
+  "social sculpture",
+  "process art",
+  "participatory art",
+  "relational aesthetics",
+  "architecture",
+  "space",
+  "embodiment",
+  "temporality",
+  "collective practice",
+  "aesthetic experience",
+  "john dewey",
+  "georg w bertram",
+  "sculpture",
+  "performance",
+  "ritual",
+  "urban practice",
+  "spatial theory",
+];
 
-    return fragments.map((part) => {
-      const fragment = createSemanticFragment(part, { source: entry.source || "theory", excerptWords: 16, keywordLimit: 4 });
-      const evaluation = evaluateTheoryResonance([
-        entry.title,
-        fragment.excerpt,
-        ...(fragment.keywords || []),
-      ], { minScore: 1.95 });
-      if (evaluation.reject) {
-        return null;
-      }
+function normalizeText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
 
-      const curated = curateSemanticSignals([
-        entry.title,
-        fragment.excerpt,
-        ...(fragment.keywords || []),
-      ], { minScore: 1.12 });
-      if (!curated.length) {
-        return null;
-      }
+function matchesAllowedTheme(value) {
+  const normalized = normalizeText(value).toLowerCase();
+  return normalized.length > 0 && ALLOWED_THEME_TERMS.some((term) => normalized.includes(term));
+}
 
-      const concepts = [...new Set(curated.map((item) => item.signal))].slice(0, 4);
+function extractConceptualSentences(text, maxSentences = 2, maxWords = 42) {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return "";
+  }
 
-      return {
-        ...fragment,
-        title: entry.title || fragment.title,
-        text: fragment.excerpt,
-        excerpt: fragment.excerpt,
-        concept: concepts[0] || fragment.concept,
-        concepts,
-        theoryRelevance: Number(evaluation.score || 0),
-        activatedDimensions: evaluation.activatedDimensions || [],
-        age: 0,
-        opacity: 0.92,
-        y: 0,
-      };
-    }).filter(Boolean);
-  }).map((entry, index) => ({
-    id: `feed-${index}-${String(entry.excerpt || entry.text || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")}`,
-    source: entry.source || "theory",
-    title: entry.title || entry.source || "Fragment",
-    excerpt: entry.excerpt || entry.text || "",
-    keywords: entry.concepts || entry.keywords || [],
-    concept: entry.concept || entry.title || entry.source || "Fragment",
-    concepts: entry.concepts || [],
-    text: entry.excerpt || entry.text || "",
-    theoryRelevance: Number(entry.theoryRelevance || 0),
-    activatedDimensions: entry.activatedDimensions || [],
+  const sentences = normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .filter((sentence) => /\b(participat|collective|process|tempor|spatial|space|embod|action|relation|sculpt|practice|experience|interaction|ritual|urban|public)\b/i.test(sentence))
+    .slice(0, maxSentences);
+
+  const selected = (sentences.length ? sentences : normalized.split(/(?<=[.!?])\s+/).slice(0, maxSentences)).join(" ");
+  return selected.split(/\s+/).slice(0, maxWords).join(" ");
+}
+
+function createSourceMeta(entry) {
+  return [
+    entry.pageid ? `page ${entry.pageid}` : null,
+    entry.url ? "Wikipedia live API" : null,
+    Array.isArray(entry.categories) && entry.categories.length ? `categories ${entry.categories.slice(0, 4).join(" · ")}` : null,
+    Array.isArray(entry.links) && entry.links.length ? `links ${entry.links.slice(0, 4).join(" · ")}` : null,
+  ].filter(Boolean).join(" | ");
+}
+
+function stageDelay(index) {
+  return 280 + index * 760;
+}
+
+function createStagedIngestionItem(entry, index = 0) {
+  const summary = normalizeText(entry.summary || entry.excerpt || "");
+  const excerpt = extractConceptualSentences(summary, 2, 38);
+  if (!excerpt) {
+    return null;
+  }
+
+  const evaluation = evaluateTheoryResonance([
+    entry.title,
+    excerpt,
+    ...(entry.concepts || []),
+    ...(entry.categories || []),
+  ], { minScore: 1.65 });
+
+  if (evaluation.reject && !(matchesAllowedTheme(entry.title) || matchesAllowedTheme(summary))) {
+    return null;
+  }
+
+  const curated = curateSemanticSignals([
+    entry.title,
+    excerpt,
+    ...(entry.concepts || []),
+  ], { minScore: 1.08 }).slice(0, 4);
+
+  const concepts = curated.length ? [...new Set(curated.map((item) => item.signal))] : (entry.concepts || []).slice(0, 4);
+  const physics = entry.semanticPhysics || {};
+
+  return {
+    id: `ingestion-${String(entry.pageid || entry.title || index).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}-${index}`,
+    nodeId: entry.nodeId || null,
+    source: "Wikipedia live API",
+    title: entry.title || "Wikipedia article",
+    text: excerpt,
+    excerpt,
+    rawText: summary,
+    sourceMeta: createSourceMeta(entry),
+    sourceUrl: entry.url || "",
+    pageid: entry.pageid || null,
+    category: entry.title || "Wikipedia article",
+    categories: entry.categories || [],
+    links: entry.links || [],
+    keywords: concepts.slice(0, 4),
+    concept: concepts[0] || entry.title || "Wikipedia article",
+    concepts,
+    activatedDimensions: evaluation.activatedDimensions || entry.theoryDimensions || [],
+    semanticPhysics: physics,
+    theoryRelevance: Number(evaluation.score || entry.resonanceScore || 0),
+    stage: index === 0 ? "arrival" : "queued",
+    revealAt: performance.now() + stageDelay(index),
     age: 0,
     opacity: 0.92,
-    y: 0,
-  })).filter((entry) => entry.theoryRelevance >= 1.95);
+  };
+}
+
+export function buildFeedEntries(corpus) {
+  return (Array.isArray(corpus) ? corpus : [])
+    .filter((entry) => entry && (matchesAllowedTheme(entry.title) || matchesAllowedTheme(entry.summary) || matchesAllowedTheme(entry.excerpt) || (Array.isArray(entry.categories) && entry.categories.some(matchesAllowedTheme))))
+    .map((entry, index) => createStagedIngestionItem(entry, index))
+    .filter(Boolean)
+    .filter((entry) => Number(entry.theoryRelevance || 0) >= 1.12)
+    .sort((left, right) => (right.theoryRelevance || 0) - (left.theoryRelevance || 0))
+    .map((entry, index) => ({
+      ...entry,
+      stageIndex: index,
+      revealAt: performance.now() + stageDelay(index),
+    }));
 }
 
 export function createWikipediaNode(entry, viewport, existingCount = 0) {
@@ -73,7 +139,7 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
   const title = String(entry.title || entry.term || "Wikipedia Concept").trim();
   const summary = String(entry.summary || "").trim();
   const primaryCategory = categories[0] || "Wikipedia";
-  const summaryExcerpt = createConceptExcerpt(summary || title, 18);
+  const summaryExcerpt = extractConceptualSentences(summary || title, 2, 24) || createConceptExcerpt(summary || title, 18);
   const summaryKeywords = extractKeywords(summary || title, 5);
   const conceptKeywords = mergeUniqueStrings(
     [title],
@@ -101,6 +167,7 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
     source: title,
     wikiTitle: title,
     wikiSummary: summaryExcerpt,
+    sourceMeta: createSourceMeta(entry),
     abstract: summaryExcerpt,
     wikiUrl: entry.url || "",
     wikiCategories: categories,
@@ -137,6 +204,7 @@ export function createWikipediaNode(entry, viewport, existingCount = 0) {
     sizeScale: 1,
     opacity: 0.94,
     memoryOpacity: 0.76,
+    semanticPhysics: entry.semanticPhysics || {},
     appearanceCount: 1,
     lastSeenAt: performance.now(),
     firstSeenAt: performance.now(),

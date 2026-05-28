@@ -6,7 +6,7 @@ import { TheoryPanel } from "./components/TheoryPanel.js";
 import { FoundationPanel } from "./components/FoundationPanel.js";
 import { createGraphActions, graphStore } from "./graph/runtime.js";
 import { useGraphVersion } from "./graph/graphState.js";
-import { getTheorySynthesis, getTheoryStabilizationEntries } from "./graph/semanticResolver.js";
+import { getSelectedNodeDetails, getTheorySynthesis, getTheoryStabilizationEntries } from "./graph/semanticResolver.js";
 
 const DEBUG_NODE_PREFIX = "debug-";
 
@@ -197,6 +197,7 @@ export function App() {
   ];
   const theorySynthesis = getTheorySynthesis(state);
   const theoryStabilizations = getTheoryStabilizationEntries(state);
+  const selectedInspector = getSelectedNodeDetails(state);
 
   return createElement(AppLayout, {
     left: createElement(IngestionPanel, {
@@ -228,8 +229,8 @@ export function App() {
       createElement(FoundationPanel, {
         categories: state.categories,
         stabilizations: theoryStabilizations,
-        selectedInspector: null,
-        onNodeSelect: undefined,
+        selectedInspector,
+        onNodeSelect: (nodeId) => actions.selectNode(nodeId, false),
         nodeCount: state.nodes.length,
         edgeCount: state.edges.length,
       }),

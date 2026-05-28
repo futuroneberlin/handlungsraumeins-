@@ -64,10 +64,10 @@ function relationScore(left, right) {
   const laneScore = left.lane === right.lane ? 0.24 : 0;
   const phaseScore = left.phase === right.phase ? 0.2 : 0;
   const sourceScore = left.source === right.source ? 0.25 : 0;
-  const sharedScore = sharedKeywords.length * 0.34;
-  const tokenScore = sharedTokens.length * 0.18;
-  const categoryScore = sharedCategories.length * 0.42;
-  const linkScore = sharedLinks.length * 0.08;
+  const sharedScore = 0;
+  const tokenScore = 0;
+  const categoryScore = 0;
+  const linkScore = 0;
   const massScore = Math.min(left.weight || 0.5, right.weight || 0.5) * 0.45;
   const groupLeft = left.semanticGroup || null;
   const groupRight = right.semanticGroup || null;
@@ -94,13 +94,13 @@ function relationScore(left, right) {
     left.semanticLabel,
     right.semanticLabel,
   ], { minScore: 1.65 });
-  const theoryBoost = Math.min(2.8, (theoryLeft + theoryRight) * 0.26 + theoryCoreOverlap.length * 0.72 + Math.min(1.2, pairResonance.score * 0.36));
+  const theoryBoost = Math.min(3, (theoryLeft + theoryRight) * 0.26 + theoryCoreOverlap.length * 0.82 + Math.min(1.28, pairResonance.score * 0.42));
   const repetitionScore = Math.min(1.2, Math.min(left.appearanceCount || 1, right.appearanceCount || 1) * 0.12);
   const conceptScore = Math.min(2.8, sharedConceptWeight(leftVector, rightVector, sharedConcepts) * 0.74 + sharedConcepts.length * 0.34);
-  const semanticSimilarity = Math.min(3.2, conceptScore + pairResonance.score * 0.26 + sharedConcepts.length * 0.18);
-  const contextualProximity = Math.min(1.6, (proximityScore * 0.92) + laneScore * 0.24 + phaseScore * 0.48);
+  const semanticSimilarity = Math.min(3.2, conceptScore + pairResonance.score * 0.34 + sharedConcepts.length * 0.14 + theoryCoreOverlap.length * 0.18);
+  const contextualProximity = Math.min(1.2, (proximityScore * 0.52) + phaseScore * 0.46);
   const structuralSimilarity = Math.min(1.8, ((leftVector?.density || 0) + (rightVector?.density || 0)) * 0.34 + Math.min(leftVector?.theoryResonanceScore || 0, rightVector?.theoryResonanceScore || 0));
-  const reinforcement = Math.min(1.5, repetitionScore * 0.34 + sharedConcepts.length * 0.26 + theoryCoreOverlap.length * 0.34);
+  const reinforcement = Math.min(1.5, repetitionScore * 0.26 + sharedConcepts.length * 0.28 + theoryCoreOverlap.length * 0.42);
   const narrative = composeRelationNarrative({ left, right, leftVector, rightVector, sharedConcepts, sharedTheorySignals, sharedCategories, sharedLinks, sharedKeywords, theoryBoost, proximityScore: contextualProximity });
   return {
     score: semanticSimilarity + contextualProximity + structuralSimilarity + reinforcement + massScore + groupScore + bridgeScore + theoryBoost,

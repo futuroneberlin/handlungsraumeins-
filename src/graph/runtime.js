@@ -395,17 +395,35 @@ export function createGraphActions(store) {
   return {
     async bootstrap() {
       const state = store.getState();
-      const [theoryCorpus, parsedTexts, wikiSeed] = await Promise.all([
-        loadTheoryCorpus(),
-        loadJson("./data/parsedTexts.json", []),
-        loadJson("./data/wikiRelations.json", []),
-      ]);
+      const seedTopics = WIKI_TOPICS.slice(0, 3);
+      const initialEntries = [];
 
-      const mergedCorpus = [...theoryCorpus, ...parsedTexts];
-      state.corpus = mergedCorpus;
-      state.feedQueue = buildFeedEntries(mergedCorpus);
-      state.ingestionQueue = [...state.feedQueue];
-      state.wikiSeed = Array.isArray(wikiSeed) ? wikiSeed : [];
+      for (const topic of seedTopics) {
+        try {
+          const entry = await loadWikipediaPulse(topic);
+          if (entry) {
+            initialEntries.push(entry);
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      const stagedEntries = buildFeedEntries(initialEntries);
+      state.corpus = initialEntries.map((entry) => ({
+        source: entry.title,
+        title: entry.title,
+        text: entry.summary || entry.excerpt || "",
+        summary: entry.summary || entry.excerpt || "",
+        excerpt: entry.excerpt || entry.summary || "",
+        concepts: entry.concepts || [],
+        categories: entry.categories || [],
+        links: entry.links || [],
+      }));
+      state.feedQueue = [...stagedEntries];
+      state.ingestionQueue = [...stagedEntries];
+      state.wikiEntries = initialEntries.slice(0, MAX_WIKI_ENTRIES);
+      state.wikiSeed = [];
       state.foundationState = createFoundationState(state.viewport);
       ensureTheoryCoreNode(state);
       ensureTheoryAttractors(state);
@@ -503,12 +521,32 @@ export function createGraphActions(store) {
           return;
         }
 
+        const stagedItem = {
+          ...curatedItem,
+          revealAt: performance.now() + (state.ingestionQueue.length + 1) * 720,
+          stage: "queued",
+        };
+
         store.update((draft) => {
           draft.wikiEntries = [entry, ...draft.wikiEntries].slice(0, MAX_WIKI_ENTRIES);
-          draft.ingestionQueue.push(curatedItem);
+          draft.corpus = [
+            {
+              source: entry.title,
+              title: entry.title,
+              text: entry.summary || entry.excerpt || "",
+              summary: entry.summary || entry.excerpt || "",
+              excerpt: entry.excerpt || entry.summary || "",
+              concepts: entry.concepts || [],
+              categories: entry.categories || [],
+              links: entry.links || [],
+            },
+            ...draft.corpus,
+          ].slice(0, 18);
+          draft.ingestionQueue.push(stagedItem);
           if (draft.ingestionQueue.length > MAX_QUEUE_ITEMS) {
             draft.ingestionQueue = draft.ingestionQueue.slice(-MAX_QUEUE_ITEMS);
           }
+          draft.feedQueue = [...draft.ingestionQueue];
         });
         scheduleGraphStateSave(store.getState());
       } catch {
@@ -535,8 +573,12 @@ export function createGraphActions(store) {
         ensureTheoryAttractors(draft);
 
         if (now >= draft.nextFeedAt && draft.ingestionQueue.length) {
-          const nextLine = draft.ingestionQueue.shift();
-          if (nextLine && Number(nextLine.theoryRelevance || 0) >= 1.65) {
+          const nextLine = draft.ingestionQueue[0];
+          if (nextLine && Number(nextLine.revealAt || 0) > now) {
+            draft.nextFeedAt = nextLine.revealAt;
+          } else {
+            draft.ingestionQueue.shift();
+            if (nextLine && Number(nextLine.theoryRelevance || 0) >= 1.12) {
             draft.feedLines.push({
               ...nextLine,
               y: draft.viewport.height - 52,
@@ -544,9 +586,13 @@ export function createGraphActions(store) {
               opacity: nextLine.opacity ?? 0.94,
               text: nextLine.excerpt || nextLine.text || "",
               excerpt: nextLine.excerpt || nextLine.text || "",
+              sourceMeta: nextLine.sourceMeta || nextLine.source || "Wikipedia live API",
+              stage: nextLine.stage || "arrival",
             });
+            }
+            const nextQueuedLine = draft.ingestionQueue[0];
+            draft.nextFeedAt = Math.max(now + FEED_INTERVAL, Number(nextQueuedLine?.revealAt || 0) || 0);
           }
-          draft.nextFeedAt = now + FEED_INTERVAL;
         }
 
         for (const line of draft.feedLines) {

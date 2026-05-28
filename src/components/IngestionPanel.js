@@ -14,21 +14,21 @@ function clampSentences(text, maxSentences = 3) {
 export function IngestionPanel({ queue = [], feedLines = [], selectedNodeId, onNodeSelect, className = "", style, ...rest }) {
   const activeItems = [
     ...queue
-      .filter((item) => Number(item.theoryRelevance || 0) >= 1.95)
+      .filter((item) => Number(item.theoryRelevance || 0) >= 1.12)
       .slice(0, 4)
       .map((item) => ({
-        title: item.title || "Curated fragment",
+        title: item.title || "Wikipedia article",
         text: clampSentences(item.excerpt || item.text || item.rawText || "", 3),
-        meta: (item.concepts || item.keywords || []).slice(0, 4).join(" · ") || "theory-filtered semantic fragment",
+        meta: [item.sourceMeta || item.source || "Wikipedia live API", item.stage ? `stage ${item.stage}` : null].filter(Boolean).join(" · ") || "Wikipedia live API",
         nodeId: item.nodeId || item.id || null,
       })),
     ...feedLines
-      .filter((line) => Number(line.theoryRelevance || 0) >= 1.95)
+      .filter((line) => Number(line.theoryRelevance || 0) >= 1.12)
       .slice(-3)
       .map((line) => ({
-        title: line.concept || line.title || "Semantic stream",
+        title: line.title || line.concept || "Wikipedia stream",
         text: clampSentences(line.excerpt || line.text || "", 3),
-        meta: "active in sculptural transformation",
+        meta: [line.sourceMeta || line.source || "Wikipedia live API", line.stage ? `stage ${line.stage}` : "active"].filter(Boolean).join(" · "),
       })),
   ].filter((item) => item.text);
 
@@ -59,9 +59,9 @@ export function IngestionPanel({ queue = [], feedLines = [], selectedNodeId, onN
         onClick: onNodeSelect,
       })) : [createElement(SemanticNodeCard, {
         key: "curation-waiting",
-        title: "Curated semantic field",
-        text: "Neue Fragmente erscheinen nur, wenn sie eine starke Resonanz mit dem Actional Space aufweisen.",
-        meta: "anchored emergence aktiv",
+        title: "Wikipedia live queue",
+        text: "Echte Wikipedia-Artikel erscheinen nur, wenn sie thematisch passen und eine lesbare theoretische Resonanz erzeugen.",
+        meta: "staged live ingestion aktiv",
       })]),
     ),
   );
