@@ -1,7 +1,7 @@
 import { createFoundationState } from "../../core/layout.js";
 import { extractFoundationTerms } from "../../modules/semanticExtractor.js";
 import { loadTheoryCorpus } from "../../modules/theoryLoader.js";
-import { curateSemanticSignals, evaluateTheoryResonance, evaluateNodeTheoryResonance } from "../../core/theoryModel.js";
+import { evaluateTheoryResonance, evaluateNodeTheoryResonance } from "../../core/theoryModel.js";
 import { ensureTheoryCoreNode, mergeUniqueStrings, scheduleGraphStateSave } from "./graphState.js";
 import { buildFeedEntries, collectExpansionTopics, loadWikipediaPulse } from "./wikipediaIngestion.js";
 import { refreshCategories } from "./categoryEngine.js";
@@ -308,23 +308,15 @@ function createCuratedIngestionItem(entry) {
     ...(entry?.concepts || []),
     ...(entry?.categories || []),
     ...(entry?.links || []),
-  ], { minScore: 1.95 });
+  ], { minScore: 1.65 });
   if (evaluation.reject) {
     return null;
   }
 
-  const curatedSignals = curateSemanticSignals([
-    entry?.title,
+  const tags = uniqueRelevantTags([
     ...(entry?.concepts || []),
     ...(entry?.categories || []),
-    ...(entry?.links || []),
-    sourceSummary,
-  ], { minScore: 1.18 });
-  if (!curatedSignals.length) {
-    return null;
-  }
-
-  const tags = uniqueRelevantTags(curatedSignals.map((item) => item.signal), 4);
+  ], 4);
   const cleanedExcerpt = cleanExtractionText(sourceSummary, 3, 48);
   if (!cleanedExcerpt) {
     return null;
@@ -541,7 +533,7 @@ export function createGraphActions(store) {
 
         if (now >= draft.nextFeedAt && draft.ingestionQueue.length) {
           const nextLine = draft.ingestionQueue.shift();
-          if (nextLine && Number(nextLine.theoryRelevance || 0) >= 1.95) {
+          if (nextLine && Number(nextLine.theoryRelevance || 0) >= 1.65) {
             draft.feedLines.push({
               ...nextLine,
               y: draft.viewport.height - 52,
@@ -581,11 +573,11 @@ export function createGraphActions(store) {
               ...(term.keywords || []),
               term.semanticGroup,
               term.role,
-            ], { minScore: 1.85 });
+            ], { minScore: 1.7 });
             if (termValidation.reject) {
               continue;
             }
-            if ((term.theoryResonanceScore || 0) < 0.54 || (term.semanticDensity || 0) < 0.26) {
+            if ((term.theoryResonanceScore || 0) < 0.5 || (term.semanticDensity || 0) < 0.22) {
               continue;
             }
             if (draft.transformationQueue.length >= MAX_TRANSFORMATION_QUEUE) {

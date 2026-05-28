@@ -2,7 +2,6 @@ import { createElement, useEffect, useMemo, useRef } from "react";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
 import { createGraphActions } from "../graph/runtime.js";
 import { useGraphVersion, graphStore } from "../graph/graphState.js";
-import { SemanticNodeCard } from "./SemanticNodeCard.js";
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -121,6 +120,30 @@ function projectNodeDepth(node, width, height) {
     distanceRatio,
     depthLift,
     depthBlur,
+  };
+}
+
+function projectNodeBody(node) {
+  const density = clamp(Number(node.semanticDensity || 0), 0, 1);
+  const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
+  const activity = clamp(Number(node.semanticActivity || 0), 0, 1);
+  const mass = clamp(Number(node.mass || node.weight || 1), 0.7, 5.2);
+  const baseWidth = Math.max(74, Number(node.layoutWidth || 220));
+  const baseHeight = Math.max(34, baseWidth * (0.18 + density * 0.08));
+  const width = baseWidth * (0.88 + resonance * 0.18 + activity * 0.08);
+  const height = baseHeight * (0.92 + resonance * 0.14 + mass * 0.02);
+  const squash = clamp(1 - (node.distanceRatio || 0) * 0.18 + resonance * 0.05, 0.72, 1.08);
+  return {
+    width,
+    height: height * squash,
+    haloWidth: width * (1.18 + activity * 0.16),
+    haloHeight: height * (1.42 + activity * 0.2),
+    coreWidth: width * (0.62 + resonance * 0.08),
+    coreHeight: height * (0.56 + resonance * 0.08),
+    mass,
+    density,
+    resonance,
+    activity,
   };
 }
 
@@ -250,6 +273,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
         const { depthScale, distanceRatio, depthLift, depthBlur } = projectNodeDepth(node, width, height);
         const baseOpacity = clamp(node.atmosphericOpacity ?? node.opacity ?? 0.82, 0.2, 1);
+        const body = projectNodeBody({ ...node, semanticActivity: activity, distanceRatio });
 
         return {
           ...node,
@@ -257,6 +281,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
           distanceRatio,
           depthLift,
           depthBlur,
+          body,
           semanticActivity: activity,
           renderOpacity: clamp(baseOpacity * (0.38 + activity * 0.62) * (1.02 - Math.min(0.22, Math.max(0, node.z ?? 1) * 0.06)), 0.16, 1),
         };
@@ -381,31 +406,46 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
           },
           style: { pointerEvents: "auto", cursor: "pointer" },
         },
-        createElement(
-          "foreignObject",
-          {
-            x: -(Math.max(80, node.layoutWidth || 220) / 2),
-            y: -56,
-            width: Math.max(80, node.layoutWidth || 220),
-            height: 132,
-            style: {
-              overflow: "visible",
-              pointerEvents: "auto",
-                filter: `blur(${clamp(node.depthBlur ?? 0.12, 0.02, 0.42)}px) saturate(${clamp(0.9 + (node.z ?? 1) * 0.1, 0.88, 1.14)})`,
-            },
-          },
-          createElement(
-            "div",
-            { xmlns: "http://www.w3.org/1999/xhtml" },
-            createElement(SemanticNodeCard, {
-              title: node.semanticLabel || node.title || node.text,
-              text: node.semanticExcerpt || node.wikiSummary || "",
-              meta: (node.concepts || node.keywords || []).slice(0, 4).join(" · "),
-              nodeId: node.id,
-              onClick: undefined,
-            }),
-          ),
-        ),
+        createElement("ellipse", {
+          cx: 0,
+          cy: 0,
+          rx: node.body?.haloWidth ? node.body.haloWidth * 0.5 : Math.max(52, (node.layoutWidth || 220) * 0.32),
+          ry: node.body?.haloHeight ? node.body.haloHeight * 0.5 : Math.max(26, (node.layoutWidth || 220) * 0.11),
+          fill: "#f3ebdf",
+          fillOpacity: clamp(0.1 + (node.body?.activity || 0) * 0.12, 0.06, 0.22),
+          stroke: "#f6f0e7",
+          strokeOpacity: 0.12,
+          strokeWidth: 1,
+          style: { filter: `blur(${clamp((node.depthBlur || 0.12) * 1.2, 0.02, 0.6)}px)` },
+        }),
+        createElement("ellipse", {
+          cx: 0,
+          cy: 0,
+          rx: node.body?.width ? node.body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
+          ry: node.body?.height ? node.body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
+          fill: node.id === "theory-core-actional-space" ? "#f4d37a" : "#efe3ce",
+          fillOpacity: clamp(0.32 + (node.body?.resonance || 0) * 0.34 + (node.body?.activity || 0) * 0.12, 0.18, 0.92),
+          stroke: "#ffffff",
+          strokeOpacity: clamp(0.14 + (node.body?.density || 0) * 0.16, 0.06, 0.32),
+          strokeWidth: clamp(0.8 + (node.body?.mass || 1) * 0.08, 0.8, 1.6),
+        }),
+        createElement("ellipse", {
+          cx: -Math.max(4, (node.body?.width || 60) * 0.08),
+          cy: -Math.max(2, (node.body?.height || 24) * 0.08),
+          rx: node.body?.coreWidth ? node.body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
+          ry: node.body?.coreHeight ? node.body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
+          fill: "#fffaf0",
+          fillOpacity: clamp(0.22 + (node.body?.resonance || 0) * 0.24, 0.1, 0.62),
+          style: { filter: `blur(${clamp((node.depthBlur || 0.12) * 0.45, 0.01, 0.22)}px)` },
+        }),
+        ...(Array.isArray(node.concepts) ? node.concepts.slice(0, 3).map((concept, conceptIndex) => createElement("circle", {
+          key: `${node.id}-particle-${conceptIndex}`,
+          cx: Math.cos((conceptIndex / Math.max(1, Math.min(3, node.concepts.length))) * Math.PI * 2) * ((node.body?.width || 40) * 0.22),
+          cy: Math.sin((conceptIndex / Math.max(1, Math.min(3, node.concepts.length))) * Math.PI * 2) * ((node.body?.height || 18) * 0.34),
+          r: 1.5 + (node.body?.activity || 0) * 1.2,
+          fill: "#ffffff",
+          fillOpacity: clamp(0.32 + (node.body?.activity || 0) * 0.28, 0.12, 0.7),
+        })) : []),
       )),
     ),
   );
