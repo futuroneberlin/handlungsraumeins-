@@ -3,8 +3,49 @@ import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } 
 import { createGraphActions } from "../graph/runtime.js";
 import { graphStore } from "../graph/graphState.js";
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+const STOPWORDS = new Set([
+  "and",
+  "or",
+  "the",
+  "of",
+  "for",
+  "in",
+  "to",
+  "with",
+  "through",
+  "into",
+  "from",
+  "by",
+  "on",
+  "at",
+  "a",
+  "an",
+  "as",
+  "is",
+  "are",
+  "be",
+  "this",
+  "that",
+  "these",
+  "those",
+  "using",
+  "via",
+  "about",
+  "over",
+  "under",
+  "between",
+]);
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function normalizeTerm(term) {
+  return String(term || "")
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizeKey(value) {
@@ -12,6 +53,18 @@ function normalizeKey(value) {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "")
     .trim();
+}
+
+function hashString(value) {
+  let hash = 0;
+  for (const character of String(value || "")) {
+    hash = (hash * 31 + character.codePointAt(0)) % 2147483647;
+  }
+  return Math.abs(hash);
+}
+
+function seededUnit(value, salt = 0) {
+  return ((hashString(`${value}:${salt}`) % 1000) + 0.5) / 1000;
 }
 
 function extractNodeId(node) {
@@ -27,9 +80,8 @@ function extractNodeId(node) {
     return String(node.nodeId);
   }
 
-  const wikiIdentity = node.wikiTitle || node.title || node.semanticLabel || node.keyword || node.text || node.wikiUrl;
-  const normalized = normalizeKey(wikiIdentity);
-  return normalized;
+  const identity = node.wikiTitle || node.title || node.semanticLabel || node.keyword || node.text || node.wikiUrl;
+  return normalizeKey(identity);
 }
 
 function resolveEndpoint(reference, nodesById, nodesByIndex) {
@@ -60,20 +112,71 @@ function resolveEndpoint(reference, nodesById, nodesByIndex) {
   return null;
 }
 
+function wordTokens(value) {
+  return normalizeTerm(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word) && !/^(?:edit|stub|wikipedia|citation|template|page|pages|article|articles)$/i.test(word));
+}
+
+function compressPhrase(value, maxWords = 3) {
+  return wordTokens(value).slice(0, maxWords).join(" ");
+}
+
+function collectNodeFragments(node) {
+  const collected = [];
+  const sources = [
+    node.semanticLabel,
+    node.title,
+    node.keyword,
+    node.text,
+    ...(node.concepts || []),
+    ...(node.keywords || []),
+    ...(node.wikiCategories || []),
+    ...(node.theoryDimensions || []),
+  ];
+
+  for (const source of sources) {
+    const phrase = compressPhrase(source, 4);
+    if (!phrase || collected.includes(phrase)) {
+      continue;
+    }
+
+    collected.push(phrase);
+    if (collected.length >= 6) {
+      break;
+    }
+  }
+
+  if (!collected.length && node.summary) {
+    const summaryFragments = normalizeTerm(node.summary)
+      .split(/(?<=[.!?])\s+/)
+      .map((segment) => compressPhrase(segment, 4))
+      .filter(Boolean);
+    collected.push(...summaryFragments.slice(0, 4));
+  }
+
+  const primary = collected[0] || compressPhrase(node.title || node.wikiTitle || node.semanticLabel || node.keyword || "semantic body", 4) || "semantic body";
+  const secondary = collected.slice(1, 4).join(" · ") || compressPhrase((node.theoryDimensions || []).join(" "), 3) || compressPhrase((node.wikiCategories || []).join(" "), 3) || "";
+
+  return { primary, secondary, fragments: collected };
+}
+
 function createFeedActivityIndex(state) {
   const activityMap = new Map();
-  const lines = state.feedLines || [];
+  const feedLines = state.feedLines || [];
+  const feedText = feedLines
+    .map((line) => `${line.title || ""} ${line.text || ""} ${(line.keywords || []).join(" ")}`.toLowerCase())
+    .join(" || ");
 
-  for (const line of lines) {
+  for (const line of feedLines) {
     const lineNodeId = String(line.nodeId || "").trim();
     if (lineNodeId) {
       activityMap.set(lineNodeId, (activityMap.get(lineNodeId) || 0) + 1.6);
     }
   }
-
-  const fullFeedText = lines
-    .map((line) => `${line.title || ""} ${line.text || ""} ${(line.keywords || []).join(" ")}`.toLowerCase())
-    .join(" || ");
 
   for (const node of state.nodes || []) {
     const nodeId = extractNodeId(node);
@@ -92,70 +195,120 @@ function createFeedActivityIndex(state) {
 
     let score = activityMap.get(nodeId) || 0;
     for (const token of tokens) {
-      if (fullFeedText.includes(token)) {
+      if (feedText.includes(token)) {
         score += 0.32;
       }
     }
-
     activityMap.set(nodeId, score);
   }
 
   return activityMap;
 }
 
-function projectNodeDepth(node, width, height) {
-  const centerX = width * 0.5;
-  const centerY = height * 0.5;
-  const maxDistance = Math.max(120, Math.hypot(centerX, centerY));
-  const distance = Math.hypot((node.x || centerX) - centerX, (node.y || centerY) - centerY);
-  const distanceRatio = clamp(distance / maxDistance, 0, 1);
-  const physics = node.semanticPhysics || {};
-  const zValue = Number.isFinite(node.z) ? node.z : Number(physics.depth || 1);
-  const activity = Number.isFinite(node.semanticActivity) ? node.semanticActivity : 0;
-  const phase = String(node.phase || "transformation");
+function inferNodeStage(node) {
+  const phase = String(node.phase || node.stage || "").toLowerCase();
   const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
   const density = clamp(Number(node.semanticDensity || 0), 0, 1);
-  const phaseLift = phase === "stabilization" ? 0.16 : phase === "formation" ? 0.08 : 0;
-  const depthScale = clamp(0.9 + resonance * 0.58 + density * 0.24 + phaseLift - distanceRatio * 0.1 + (1.25 - zValue) * 0.16, 0.5, 1.92);
-  const depthLift = Math.round((1.35 - zValue) * 24 + activity * 10 - distanceRatio * 10 + Number(physics.depthLift || 0) + (phase === "stabilization" ? 6 : 0));
-  const depthBlur = clamp(0.26 + distanceRatio * 0.28 + Math.max(0, zValue - 1) * 0.12 - resonance * 0.14, 0.02, 0.7);
+
+  if (phase === "ingestion" || phase === "arrival" || phase === "queued" || phase === "foundation") {
+    return "ingestion";
+  }
+
+  if (phase === "stabilization" || phase === "resolution" || phase === "theory") {
+    return "resolution";
+  }
+
+  if (resonance >= 0.68 || density >= 0.78 || node.id === "theory-core-actional-space" || node.isTheoryCore) {
+    return "resolution";
+  }
+
+  return "condensation";
+}
+
+function deriveNodeMorphology(node, activity, width, height, index) {
+  const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
+  const density = clamp(Number(node.semanticDensity || 0), 0, 1);
+  const stage = inferNodeStage(node);
+  const temperature = clamp(1 - resonance * 0.54 + activity * 0.16 + (stage === "ingestion" ? 0.18 : 0) + (stage === "resolution" ? -0.1 : 0), 0.08, 1.4);
+  const mass = clamp(0.95 + resonance * 4.8 + density * 1.6 + (stage === "resolution" ? 0.7 : stage === "ingestion" ? -0.2 : 0), 0.72, 7.8);
+  const stability = clamp(resonance * 0.78 + density * 0.22 + (stage === "resolution" ? 0.18 : 0) - temperature * 0.12, 0.05, 1);
+  const velocity = clamp(1.55 - stability * 0.82 + temperature * 0.52, 0.18, 1.7);
+  const depth = clamp(0.24 + resonance * 0.68 + stability * 0.18 - temperature * 0.12 + (stage === "resolution" ? 0.1 : 0), 0, 1);
+  const flowMomentum = stage === "ingestion" ? 1.24 : stage === "resolution" ? 0.6 : 0.88;
+  const lane = index % 5;
+  const laneY = height * (0.18 + lane * 0.16);
+  const laneX = stage === "ingestion" ? width * 0.14 : stage === "resolution" ? width * 0.78 : width * 0.5;
+  const orbitRadius = clamp(58 + (1 - resonance) * 72 + density * 36 + (stage === "ingestion" ? 16 : 0), 48, 260);
+  const drift = clamp((1 - stability) * 0.94 + (stage === "ingestion" ? 0.18 : 0), 0.04, 1.12);
+  const weight = clamp(0.48 + resonance * 0.72 + density * 0.28, 0.28, 1.36);
 
   return {
-    depthScale,
-    distanceRatio,
-    depthLift,
-    depthBlur,
+    mass,
+    density,
+    resonance,
+    temperature,
+    stability,
+    velocity,
+    depth,
+    flowMomentum,
+    orbitRadius,
+    drift,
+    weight,
+    stage,
+    lane,
+    laneX,
+    laneY,
+    flowSeed: seededUnit(node.id || node.title || index, index) * Math.PI * 2,
   };
 }
 
-function projectNodeBody(node) {
-  const physics = node.semanticPhysics || {};
-  const density = clamp(Number(node.semanticDensity || 0), 0, 1);
-  const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
-  const activity = clamp(Number(node.semanticActivity || 0), 0, 1);
-  const mass = clamp(Number(physics.semanticMass || node.mass || node.weight || 1), 0.7, 6.2);
-  const baseWidth = Math.max(74, Number(node.layoutWidth || 220));
-  const phase = String(node.phase || "transformation");
-  const phaseBias = phase === "stabilization" ? 0.42 : phase === "formation" ? 0.18 : -0.08;
-  const baseHeight = Math.max(34, baseWidth * (0.16 + density * 0.16));
-  const width = baseWidth * (0.76 + resonance * 0.76 + activity * 0.12 + phaseBias * 0.14);
-  const height = baseHeight * (0.84 + resonance * 0.3 + mass * 0.05 + phaseBias * 0.1);
-  const squash = clamp(1 - (node.distanceRatio || 0) * 0.26 + resonance * 0.18 + (phase === "stabilization" ? 0.08 : 0), 0.58, 1.22);
+function projectNodeDepth(node, width, height, focusState = {}) {
+  const centerX = width * 0.5;
+  const centerY = height * 0.5;
+  const distanceRatio = clamp(Math.hypot((node.x || centerX) - centerX, (node.y || centerY) - centerY) / Math.max(120, Math.hypot(centerX, centerY)), 0, 1);
+  const depth = clamp(Number(node.depth || 0.5), 0, 1);
+  const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
+  const stability = clamp(Number(node.stability || 0.5), 0, 1);
+  const temperature = clamp(Number(node.temperature || 0.5), 0, 1.5);
+  const selectedBoost = focusState.isSelected ? 0.25 : focusState.isNeighbor ? 0.12 : focusState.isHovered ? 0.08 : 0;
+  const scale = clamp(0.7 + depth * 0.78 + resonance * 0.22 + selectedBoost - distanceRatio * 0.14, 0.42, 2.2);
+  const lift = Math.round((depth - 0.5) * 18 + stability * 6 - temperature * 7 + (focusState.isSelected ? 8 : 0));
+  const blur = clamp((1 - depth) * 0.3 + temperature * 0.12 + distanceRatio * 0.12 - resonance * 0.14, 0.04, 0.92);
+
+  return { scale, lift, blur, distanceRatio };
+}
+
+function projectNodeBody(node, focusState = {}) {
+  const density = clamp(Number(node.density || node.semanticDensity || 0), 0, 1);
+  const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
+  const activity = clamp(Number(node.activity || node.semanticActivity || 0), 0, 1);
+  const mass = clamp(Number(node.mass || 1), 0.72, 7.8);
+  const stage = String(node.stage || "condensation");
+  const selectedBoost = focusState.isSelected ? 0.22 : focusState.isNeighbor ? 0.08 : focusState.isHovered ? 0.05 : 0;
+  const baseWidth = Math.max(80, Number(node.layoutWidth || 220));
+  const baseHeight = Math.max(34, baseWidth * (0.15 + density * 0.16));
+  const width = baseWidth * (0.66 + resonance * 0.88 + activity * 0.12 + selectedBoost);
+  const height = baseHeight * (0.84 + resonance * 0.28 + mass * 0.04 + (stage === "resolution" ? 0.12 : 0));
+  const squash = clamp(1 - (node.distanceRatio || 0) * 0.2 + resonance * 0.14 + (stage === "resolution" ? 0.1 : 0), 0.58, 1.28);
+  const haloWidth = width * (1.16 + activity * 0.12 + (focusState.isSelected ? 0.16 : 0));
+  const haloHeight = height * (1.3 + activity * 0.16 + (focusState.isSelected ? 0.12 : 0));
+  const coreWidth = width * (0.44 + resonance * 0.28);
+  const coreHeight = height * (0.38 + resonance * 0.2);
+
   return {
     width,
     height: height * squash,
-    haloWidth: width * (1.18 + activity * 0.18 + (phase === "stabilization" ? 0.1 : 0)),
-    haloHeight: height * (1.38 + activity * 0.22 + (phase === "stabilization" ? 0.12 : 0)),
-    coreWidth: width * (0.5 + resonance * 0.24),
-    coreHeight: height * (0.44 + resonance * 0.22),
+    haloWidth,
+    haloHeight,
+    coreWidth,
+    coreHeight,
     mass,
     density,
     resonance,
     activity,
+    stability: clamp(Number(node.stability || 0.5), 0, 1),
   };
 }
-
-const SVG_NS = "http://www.w3.org/2000/svg";
 
 function createSvgElement(name, attributes = {}) {
   const element = document.createElementNS(SVG_NS, name);
@@ -174,38 +327,40 @@ function setSvgElementAttributes(element, attributes = {}) {
       element.removeAttribute(key);
       continue;
     }
-
-    if (key === "style") {
-      element.setAttribute(key, String(value));
-      continue;
-    }
-
     element.setAttribute(key, String(value));
   }
 }
 
-function createNodeVisual(nodeId, onNodeSelect) {
+function createNodeVisual(nodeId, handlers = {}) {
   const group = createSvgElement("g", { "data-node-id": nodeId, style: "pointer-events:auto;cursor:pointer" });
-  const orbit = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none" });
-  const halo = createSvgElement("ellipse", { cx: 0, cy: 0 });
-  const body = createSvgElement("ellipse", { cx: 0, cy: 0 });
-  const core = createSvgElement("ellipse", { cx: 0, cy: 0 });
-  const particles = [0, 1, 2].map(() => createSvgElement("circle", { cx: 0, cy: 0 }));
+  const wake = createSvgElement("path", { fill: "none", pointerEvents: "none" });
+  const orbit = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", pointerEvents: "none" });
+  const halo = createSvgElement("ellipse", { cx: 0, cy: 0, pointerEvents: "none" });
+  const body = createSvgElement("ellipse", { cx: 0, cy: 0, pointerEvents: "none" });
+  const core = createSvgElement("ellipse", { cx: 0, cy: 0, pointerEvents: "none" });
+  const label = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit" });
+  const meta = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit" });
+  const particles = [0, 1, 2, 3].map(() => createSvgElement("circle", { cx: 0, cy: 0, pointerEvents: "none" }));
 
-  group.append(orbit, halo, body, core, ...particles);
-  group.addEventListener("click", (event) => {
+  group.append(wake, orbit, halo, body, core, ...particles, label, meta);
+
+  group.addEventListener("pointerenter", (event) => {
     event.stopPropagation();
-    onNodeSelect?.(nodeId);
+    handlers.onHover?.(nodeId);
   });
 
-  return {
-    group,
-    orbit,
-    halo,
-    body,
-    core,
-    particles,
-  };
+  group.addEventListener("pointerleave", (event) => {
+    event.stopPropagation();
+    handlers.onUnhover?.(nodeId);
+  });
+
+  group.addEventListener("click", (event) => {
+    event.stopPropagation();
+    handlers.onSelect?.(nodeId);
+    handlers.onActivate?.(nodeId);
+  });
+
+  return { group, wake, orbit, halo, body, core, label, meta, particles };
 }
 
 function createLinkVisual() {
@@ -218,6 +373,201 @@ function createLinkVisual() {
   });
 }
 
+function createFlowForce(sceneRef) {
+  let nodes = [];
+
+  const force = (alpha) => {
+    const scene = sceneRef.current;
+    const width = scene.width || 960;
+    const height = scene.height || 560;
+    const centerX = width * 0.5;
+    const centerY = height * 0.5;
+
+    for (const node of nodes) {
+      const stage = node.stage || inferNodeStage(node);
+      const flowMomentum = Number(node.flowMomentum || 0.8);
+      const temperature = clamp(Number(node.temperature || 0.5), 0, 1.5);
+      const mass = clamp(Number(node.mass || 1), 0.72, 7.8);
+      const laneWave = Math.sin((scene.tickTime || performance.now()) * 0.00022 + Number(node.flowSeed || 0)) * 10;
+      const targetX = stage === "ingestion" ? width * 0.12 : stage === "resolution" ? width * 0.82 : centerX + Math.sin(Number(node.flowSeed || 0)) * 26;
+      const targetY = stage === "ingestion" ? height * (0.18 + (node.lane || 0) * 0.16) : stage === "resolution" ? height * (0.28 + (node.lane || 0) * 0.11) : centerY + laneWave;
+      const dx = targetX - (node.x || centerX);
+      const dy = targetY - (node.y || centerY);
+      const push = alpha * (0.018 + temperature * 0.014 + flowMomentum * 0.01);
+
+      node.vx += dx * push * 0.018;
+      node.vy += dy * push * 0.018;
+      node.vx += (stage === "ingestion" ? 0.08 : stage === "resolution" ? 0.01 : 0) * alpha;
+      node.vy += Math.sin(Number(node.flowSeed || 0) + (scene.tickTime || performance.now()) * 0.00035) * alpha * 0.01;
+      node.vx -= node.vx * (0.02 + mass * 0.003);
+      node.vy -= node.vy * (0.016 + mass * 0.0025);
+    }
+  };
+
+  force.initialize = (value) => {
+    nodes = value || [];
+  };
+
+  return force;
+}
+
+function createVortexForce(sceneRef) {
+  let nodes = [];
+
+  const force = (alpha) => {
+    const scene = sceneRef.current;
+    const width = scene.width || 960;
+    const height = scene.height || 560;
+    const focusId = scene.selectedNodeId || scene.hoveredNodeId || null;
+    const focusNode = focusId ? nodes.find((candidate) => candidate.id === focusId) : null;
+    const centerX = focusNode?.x ?? width * 0.54;
+    const centerY = focusNode?.y ?? height * 0.5;
+
+    for (const node of nodes) {
+      if (focusNode && node.id === focusNode.id) {
+        continue;
+      }
+
+      const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
+      const stability = clamp(Number(node.stability || 0.5), 0, 1);
+      const orbitRadius = clamp(Number(node.orbitRadius || 120), 48, 260);
+      const dx = (node.x || centerX) - centerX;
+      const dy = (node.y || centerY) - centerY;
+      const distance = Math.max(24, Math.hypot(dx, dy));
+      const attraction = clamp((1.04 - resonance) * 0.012 + (1 - stability) * 0.004, 0.004, 0.02);
+      const radial = alpha * attraction * (distance > orbitRadius ? 1.1 : 0.48);
+      const tangentX = (-dy / distance) * alpha * (0.012 + resonance * 0.008);
+      const tangentY = (dx / distance) * alpha * (0.012 + resonance * 0.008);
+
+      node.vx += -dx * radial + tangentX;
+      node.vy += -dy * radial + tangentY;
+    }
+  };
+
+  force.initialize = (value) => {
+    nodes = value || [];
+  };
+
+  return force;
+}
+
+function createCondensationForce(sceneRef) {
+  let nodes = [];
+
+  const force = (alpha) => {
+    const scene = sceneRef.current;
+    const width = scene.width || 960;
+    const height = scene.height || 560;
+    const attractors = nodes
+      .filter((node) => Number(node.resonance || node.theoryResonanceScore || 0) >= 0.58 || node.stage === "resolution" || node.id === "theory-core-actional-space")
+      .sort((left, right) => (right.resonance || right.theoryResonanceScore || 0) - (left.resonance || left.theoryResonanceScore || 0))
+      .slice(0, 6);
+
+    for (const node of nodes) {
+      const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
+      const stability = clamp(Number(node.stability || 0.5), 0, 1);
+      if (resonance >= 0.72 || !attractors.length) {
+        continue;
+      }
+
+      let target = attractors[0];
+      let targetDistance = Number.POSITIVE_INFINITY;
+      for (const candidate of attractors) {
+        if (candidate.id === node.id) {
+          continue;
+        }
+
+        const distance = Math.hypot((candidate.x || width * 0.5) - (node.x || width * 0.5), (candidate.y || height * 0.5) - (node.y || height * 0.5));
+        if (distance < targetDistance) {
+          targetDistance = distance;
+          target = candidate;
+        }
+      }
+
+      const dx = (target?.x ?? width * 0.5) - (node.x || width * 0.5);
+      const dy = (target?.y ?? height * 0.5) - (node.y || height * 0.5);
+      const pull = alpha * clamp(0.006 + (1 - resonance) * 0.015 + (1 - stability) * 0.004, 0.004, 0.026);
+
+      node.vx += dx * pull;
+      node.vy += dy * pull;
+    }
+  };
+
+  force.initialize = (value) => {
+    nodes = value || [];
+  };
+
+  return force;
+}
+
+function createDriftForce(sceneRef) {
+  let nodes = [];
+
+  const force = (alpha) => {
+    const scene = sceneRef.current;
+    const width = scene.width || 960;
+    const height = scene.height || 560;
+    const centerX = width * 0.5;
+    const centerY = height * 0.5;
+
+    for (const node of nodes) {
+      const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
+      const stability = clamp(Number(node.stability || 0.5), 0, 1);
+      const temperature = clamp(Number(node.temperature || 0.5), 0, 1.5);
+      const drift = clamp(Number(node.drift || 0.35), 0.04, 1.12);
+      const weakness = clamp(1 - resonance * 0.9 - stability * 0.2, 0, 1);
+
+      if (weakness <= 0.08) {
+        continue;
+      }
+
+      const awayX = (node.x || centerX) - centerX;
+      const awayY = (node.y || centerY) - centerY;
+      const spread = alpha * (0.002 + weakness * 0.006 + temperature * 0.002);
+      node.vx += awayX * spread + Math.sin(Number(node.flowSeed || 0) + (scene.tickTime || performance.now()) * 0.0002) * alpha * 0.002 * drift;
+      node.vy += awayY * spread + Math.cos(Number(node.flowSeed || 0) + (scene.tickTime || performance.now()) * 0.00017) * alpha * 0.002 * drift;
+      node.vx -= node.vx * weakness * 0.01;
+      node.vy -= node.vy * weakness * 0.01;
+    }
+  };
+
+  force.initialize = (value) => {
+    nodes = value || [];
+  };
+
+  return force;
+}
+
+function createTheoryGravityForce(sceneRef) {
+  let nodes = [];
+
+  const force = (alpha) => {
+    const scene = sceneRef.current;
+    const width = scene.width || 960;
+    const height = scene.height || 560;
+    const now = performance.now();
+    const pulse = scene.interactionPulseUntil && scene.interactionPulseUntil > now ? 1.9 : 1;
+
+    for (const node of nodes) {
+      const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
+      const stability = clamp(Number(node.stability || 0.5), 0, 1);
+      const stage = node.stage || inferNodeStage(node);
+      const targetX = stage === "resolution" || resonance > 0.58 ? width * 0.82 : stage === "ingestion" ? width * 0.3 : width * 0.64;
+      const targetY = height * (0.28 + (node.lane || 0) * 0.12);
+      const gravity = clamp(0.006 + resonance * 0.014 + stability * 0.004, 0.004, 0.024) * pulse;
+
+      node.vx += (targetX - (node.x || width * 0.5)) * alpha * gravity;
+      node.vy += (targetY - (node.y || height * 0.5)) * alpha * (gravity * 0.62);
+    }
+  };
+
+  force.initialize = (value) => {
+    nodes = value || [];
+  };
+
+  return force;
+}
+
 export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges = null, className = "", style, ...rest }) {
   const effectiveStore = store || graphStore;
   const containerRef = useRef(null);
@@ -226,20 +576,21 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
   const centerForceRef = useRef(null);
   const linkForceRef = useRef(null);
   const collisionForceRef = useRef(null);
-  const nodesLayerRef = useRef(null);
-  const linksLayerRef = useRef(null);
   const nodeElementsRef = useRef(new Map());
   const linkElementsRef = useRef(new Map());
-  const renderSceneRef = useRef(null);
   const sceneRef = useRef({
     nodes: [],
     links: [],
     width: 0,
     height: 0,
     selectedNodeId: null,
+    hoveredNodeId: null,
     activityMap: new Map(),
     neighborIds: new Set(),
+    tickTime: performance.now(),
+    interactionPulseUntil: 0,
   });
+  const renderSceneRef = useRef(null);
   const onNodeSelectRef = useRef(onNodeSelect);
   onNodeSelectRef.current = onNodeSelect;
 
@@ -251,21 +602,27 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
 
     const resize = () => {
       const el = containerRef.current;
-      if (!el) return;
+      if (!el) {
+        return;
+      }
+
       const rect = el.getBoundingClientRect();
-      const viewport = { width: Math.max(320, Math.floor(rect.width)), height: Math.max(240, Math.floor(rect.height)), dpr: window.devicePixelRatio || 1 };
-      actions.setViewport(viewport);
+      actions.setViewport({ width: Math.max(320, Math.floor(rect.width)), height: Math.max(240, Math.floor(rect.height)), dpr: window.devicePixelRatio || 1 });
     };
 
     resize();
     window.addEventListener("resize", resize, { passive: true });
 
     const tick = (now) => {
-      if (!active) return;
+      if (!active) {
+        return;
+      }
+
+      sceneRef.current.tickTime = now;
       try {
         actions.tick(now);
-      } catch (e) {
-        console.error("Tick error:", e);
+      } catch (error) {
+        console.error("Tick error:", error);
       }
       frameId = window.requestAnimationFrame(tick);
     };
@@ -288,20 +645,35 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     svg.innerHTML = "";
 
     const defs = createSvgElement("defs");
-    const marker = createSvgElement("marker", {
-      id: "relation-arrow",
-      markerWidth: 8,
-      markerHeight: 8,
-      refX: 7,
-      refY: 3.5,
-      orient: "auto",
-      markerUnits: "strokeWidth",
-    });
+    const marker = createSvgElement("marker", { id: "relation-arrow", markerWidth: 8, markerHeight: 8, refX: 7, refY: 3.5, orient: "auto", markerUnits: "strokeWidth" });
     marker.appendChild(createSvgElement("path", { d: "M0,0 L0,7 L7,3.5 z", fill: "#ffffff", "fill-opacity": 0.78 }));
-    const filter = createSvgElement("filter", { id: "relation-soft-glow", x: "-20%", y: "-20%", width: "140%", height: "140%" });
-    filter.appendChild(createSvgElement("feGaussianBlur", { stdDeviation: 1.1, result: "blur" }));
-    filter.appendChild(createSvgElement("feColorMatrix", { in: "blur", type: "matrix", values: "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.85 0" }));
-    defs.append(marker, filter);
+
+    const glow = createSvgElement("filter", { id: "relation-soft-glow", x: "-20%", y: "-20%", width: "140%", height: "140%" });
+    glow.appendChild(createSvgElement("feGaussianBlur", { stdDeviation: 1.1, result: "blur" }));
+    glow.appendChild(createSvgElement("feColorMatrix", { in: "blur", type: "matrix", values: "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.85 0" }));
+
+    const nodeBodyGradient = createSvgElement("radialGradient", { id: "node-body-gradient", cx: "42%", cy: "35%", r: "72%" });
+    nodeBodyGradient.append(
+      createSvgElement("stop", { offset: "0%", "stop-color": "#fffaf2", "stop-opacity": 0.96 }),
+      createSvgElement("stop", { offset: "48%", "stop-color": "#f4e6ca", "stop-opacity": 0.92 }),
+      createSvgElement("stop", { offset: "100%", "stop-color": "#d6be8b", "stop-opacity": 0.72 }),
+    );
+
+    const nodeCoreGradient = createSvgElement("radialGradient", { id: "node-core-gradient", cx: "48%", cy: "42%", r: "68%" });
+    nodeCoreGradient.append(
+      createSvgElement("stop", { offset: "0%", "stop-color": "#ffffff", "stop-opacity": 1 }),
+      createSvgElement("stop", { offset: "72%", "stop-color": "#f8f0df", "stop-opacity": 0.92 }),
+      createSvgElement("stop", { offset: "100%", "stop-color": "#f0e0c2", "stop-opacity": 0.7 }),
+    );
+
+    const nodeHaloGradient = createSvgElement("radialGradient", { id: "node-halo-gradient", cx: "50%", cy: "48%", r: "78%" });
+    nodeHaloGradient.append(
+      createSvgElement("stop", { offset: "0%", "stop-color": "#ffffff", "stop-opacity": 0.24 }),
+      createSvgElement("stop", { offset: "55%", "stop-color": "#f6ead7", "stop-opacity": 0.12 }),
+      createSvgElement("stop", { offset: "100%", "stop-color": "#f6ead7", "stop-opacity": 0 }),
+    );
+
+    defs.append(marker, glow, nodeBodyGradient, nodeCoreGradient, nodeHaloGradient);
 
     const linksLayer = createSvgElement("g", { class: "edge-layer-root" });
     const nodesLayer = createSvgElement("g", { class: "node-layer-root" });
@@ -311,18 +683,20 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     const linkForce = forceLink([])
       .id((node) => node.id)
       .distance((edge) => {
-        const physics = edge.sourceNode?.semanticPhysics || edge.targetNode?.semanticPhysics || {};
+        const sourceMass = Number(edge.sourceNode?.mass || edge.targetNode?.mass || 1);
         const strength = Number(edge.semanticStrength ?? edge.score ?? edge.weight ?? 0);
-        return clamp((physics.orbitRadius || 180) - strength * 26, 72, 280);
+        const stageBias = edge.sourceNode?.stage === "resolution" || edge.targetNode?.stage === "resolution" ? -22 : 0;
+        return clamp(126 + sourceMass * 12 - strength * 42 + stageBias, 62, 320);
       })
       .strength((edge) => {
         const confidence = Number(edge.confidence || edge.semanticStrength || edge.score || edge.weight || 0);
-        return clamp(0.12 + confidence * 0.16, 0.08, 0.34);
+        return clamp(0.08 + confidence * 0.18, 0.06, 0.36);
       });
+
     const collisionForce = forceCollide()
       .radius((node) => {
-        const physics = node.semanticPhysics || {};
-        return Math.max(44, physics.collisionRadius || (node.layoutWidth || 220) * 0.24);
+        const body = projectNodeBody(node);
+        return Math.max(36, body.width * 0.24 + body.mass * 0.8);
       })
       .iterations(2);
 
@@ -330,138 +704,41 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       .force("center", centerForce)
       .force("link", linkForce)
       .force("charge", forceManyBody().strength((node) => {
-        const physics = node.semanticPhysics || {};
-        const resonance = Number(node.theoryResonanceScore || 0);
-        return -(52 + (physics.semanticMass || 1) * 22 + resonance * 14 + (node.semanticDensity || 0) * 18);
+        const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
+        const mass = clamp(Number(node.mass || 1), 0.72, 7.8);
+        const stability = clamp(Number(node.stability || 0.5), 0, 1);
+        return -(42 + mass * 20 + resonance * 22 + stability * 10);
       }))
-      .force("collision", collisionForce);
+      .force("collision", collisionForce)
+      .force("flow", createFlowForce(sceneRef))
+      .force("vortex", createVortexForce(sceneRef))
+      .force("condensation", createCondensationForce(sceneRef))
+      .force("drift", createDriftForce(sceneRef))
+      .force("gravity", createTheoryGravityForce(sceneRef))
+      .velocityDecay(0.58)
+      .alphaDecay(0.015)
+      .alphaMin(0.001);
 
     simulation.on("tick", () => {
-      const scene = sceneRef.current;
-      const { nodes, links, selectedNodeId, neighborIds, activityMap, width, height } = scene;
-
-      const nodeLookup = new Map(nodes.map((node) => [node.id, node]));
-
-      for (const node of nodes) {
-        const nodeElements = nodeElementsRef.current.get(node.id);
-        if (!nodeElements) {
-          continue;
-        }
-
-        const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
-        const { depthScale, depthLift, depthBlur } = projectNodeDepth({ ...node, semanticActivity: activity }, width, height);
-        const isSelected = selectedNodeId && node.id === selectedNodeId;
-        const isNeighbor = selectedNodeId && neighborIds.has(node.id);
-        const body = projectNodeBody({ ...node, semanticActivity: activity, distanceRatio: clamp(Math.hypot((node.x || 0) - width * 0.5, (node.y || 0) - height * 0.5) / Math.max(120, Math.hypot(width * 0.5, height * 0.5)), 0, 1) });
-        const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
-        const phase = String(node.phase || "transformation");
-        const opacity = clamp((node.atmosphericOpacity ?? node.opacity ?? 0.82) * (isSelected ? 1 : isNeighbor ? 0.94 : resonance < 0.22 ? 0.7 : 0.9), 0.04, 1);
-        const transform = `translate(${node.x || 0}, ${node.y + depthLift || 0}) scale(${clamp(depthScale + (isSelected ? 0.28 : isNeighbor ? 0.14 : 0), 0.5, 2)})`;
-
-        nodeElements.group.setAttribute("transform", transform);
-        nodeElements.group.setAttribute("opacity", String(opacity));
-        nodeElements.group.setAttribute("data-selected", isSelected ? "true" : "false");
-        nodeElements.group.setAttribute("data-neighbor", isNeighbor ? "true" : "false");
-
-        setSvgElementAttributes(nodeElements.orbit, {
-          rx: nodeElements.body ? Number(nodeElements.body.getAttribute("rx") || 0) * 1.14 : Math.max(58, (node.layoutWidth || 220) * 0.34),
-          ry: nodeElements.body ? Number(nodeElements.body.getAttribute("ry") || 0) * 1.2 : Math.max(24, (node.layoutWidth || 220) * 0.1),
-          stroke: isSelected ? "#f6f0e7" : isNeighbor ? "#d9caa8" : "#ffffff",
-          strokeOpacity: isSelected ? 0.28 : isNeighbor ? 0.16 : 0.08,
-          strokeWidth: isSelected ? 1.6 : isNeighbor ? 1.2 : 0.9,
-          strokeDasharray: resonance < 0.3 ? "3 7" : null,
-        });
-
-        setSvgElementAttributes(nodeElements.halo, {
-          rx: body.haloWidth ? body.haloWidth * 0.5 : Math.max(52, (node.layoutWidth || 220) * 0.32),
-          ry: body.haloHeight ? body.haloHeight * 0.5 : Math.max(26, (node.layoutWidth || 220) * 0.11),
-          fill: "#f3ebdf",
-          fillOpacity: clamp(0.06 + (body.activity || 0) * 0.14 + (isSelected ? 0.06 : 0), 0.03, 0.26),
-          stroke: "#f6f0e7",
-          strokeOpacity: isSelected ? 0.18 : 0.08,
-          strokeWidth: 1,
-          style: `filter: blur(${clamp(depthBlur * 1.2, 0.02, 0.7)}px);`,
-        });
-
-        setSvgElementAttributes(nodeElements.body, {
-          rx: body.width ? body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
-          ry: body.height ? body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
-          fill: node.id === "theory-core-actional-space" ? "#f4d37a" : "#efe3ce",
-          fillOpacity: clamp(0.12 + body.resonance * 0.66 + body.activity * 0.12 + (isSelected ? 0.22 : isNeighbor ? 0.1 : 0), 0.08, 0.99),
-          stroke: "#ffffff",
-          strokeOpacity: clamp(0.1 + body.density * 0.22, 0.04, 0.36),
-          strokeWidth: clamp(0.72 + body.mass * 0.14 + (isSelected ? 0.18 : 0), 0.7, 2.1),
-        });
-
-        setSvgElementAttributes(nodeElements.core, {
-          rx: body.coreWidth ? body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
-          ry: body.coreHeight ? body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
-          fill: "#fffaf0",
-          fillOpacity: clamp(0.1 + body.resonance * 0.4 + (isSelected ? 0.12 : 0), 0.06, 0.82),
-          style: `filter: blur(${clamp(depthBlur * 0.45, 0.01, 0.22)}px);`,
-        });
-
-        nodeElements.particles.forEach((particle, particleIndex) => {
-          const angle = (particleIndex / Math.max(1, Math.min(3, node.concepts?.length || 3))) * Math.PI * 2;
-          setSvgElementAttributes(particle, {
-            cx: Math.cos(angle) * ((body.width || 40) * 0.22),
-            cy: Math.sin(angle) * ((body.height || 18) * 0.34),
-            r: 1.3 + body.activity * 1.1 + (isSelected ? 0.4 : 0),
-            fill: "#ffffff",
-            fillOpacity: clamp(0.18 + body.activity * 0.34 + (isSelected ? 0.18 : 0), 0.1, 0.82),
-          });
-        });
-      }
-
-      for (const [edgeId, edgeElement] of linkElementsRef.current.entries()) {
-        const edge = scene.links.find((candidate) => candidate.id === edgeId);
-        if (!edge) {
-          edgeElement.remove();
-          linkElementsRef.current.delete(edgeId);
-          continue;
-        }
-
-        const left = nodeLookup.get(edge.source?.id || edge.source);
-        const right = nodeLookup.get(edge.target?.id || edge.target);
-        if (!left || !right) {
-          continue;
-        }
-
-        const semanticStrength = edge.semanticStrength ?? edge.score ?? edge.weight ?? 0;
-        const selectedEdge = selectedNodeId && (left.id === selectedNodeId || right.id === selectedNodeId);
-        const leftZ = left.z ?? 1;
-        const rightZ = right.z ?? 1;
-        const depthSpan = Math.abs(leftZ - rightZ);
-        const midpointX = (left.x + right.x) * 0.5;
-        const midpointY = (left.y + right.y) * 0.5;
-        const dx = right.x - left.x;
-        const dy = right.y - left.y;
-        const distance = Math.max(1, Math.hypot(dx, dy));
-        const nx = -dy / distance;
-        const ny = dx / distance;
-        const tension = clamp(0.04 + semanticStrength * 0.12 + depthSpan * 0.08 + Math.min(0.26, (edge.confidence || 0) * 0.18), 0.04, 0.52);
-        const curveX = midpointX + nx * distance * tension;
-        const curveY = midpointY + ny * distance * tension * 0.72;
-        const d = `M ${left.x} ${left.y} Q ${curveX} ${curveY} ${right.x} ${right.y}`;
-
-        setSvgElementAttributes(edgeElement, {
-          d,
-          stroke: edge.type === "wiki" || edge.type === "theory" ? "#c9a227" : "#ffffff",
-          strokeOpacity: Math.min(0.98, Math.max(0.03, (edge.opacity ?? 0.06) + Math.min(0.48, semanticStrength * 0.24) + Math.min(0.24, (edge.confidence || 0) * 0.2) + (selectedEdge ? 0.28 : 0) - (selectedNodeId && !selectedEdge ? 0.16 : 0))),
-          strokeWidth: Math.max(0.42, 0.46 + semanticStrength * 0.58 + Math.min(0.5, (edge.confidence || 0) * 0.38) + (selectedEdge ? 0.36 : 0)),
-          style: `filter: blur(${clamp(1.42 - semanticStrength * 0.34, 0.1, 1.5)}px);`,
-        });
-      }
+      renderSceneRef.current?.();
     });
 
     simulationRef.current = simulation;
     centerForceRef.current = centerForce;
     linkForceRef.current = linkForce;
     collisionForceRef.current = collisionForce;
-    nodesLayerRef.current = nodesLayer;
-    linksLayerRef.current = linksLayer;
+    nodeElementsRef.current.clear();
+    linkElementsRef.current.clear();
+    nodeElementsRef.current = new Map();
+    linkElementsRef.current = new Map();
+
+    const cleanupHover = () => {
+      sceneRef.current.hoveredNodeId = null;
+    };
+    svg.addEventListener("pointerleave", cleanupHover);
 
     return () => {
+      svg.removeEventListener("pointerleave", cleanupHover);
       simulation.stop();
       simulationRef.current = null;
       centerForceRef.current = null;
@@ -500,31 +777,39 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       const mergedNodes = sourceNodes.map((snapshot, index) => {
         const nodeId = extractNodeId(snapshot) || `node-${index}`;
         const existing = existingNodes.get(nodeId);
+        const morphology = deriveNodeMorphology({ ...snapshot, id: nodeId }, clamp(snapshot.semanticActivity || 0, 0, 1), width, height, index);
         const fallbackAngle = (index / Math.max(1, sourceNodes.length)) * Math.PI * 2;
-        const fallbackRadius = Math.min(width, height) * 0.26;
-        const nextX = Number.isFinite(snapshot.x) ? snapshot.x : width * 0.5 + Math.cos(fallbackAngle) * fallbackRadius;
-        const nextY = Number.isFinite(snapshot.y) ? snapshot.y : height * 0.5 + Math.sin(fallbackAngle) * fallbackRadius;
-
-        if (existing) {
-          Object.assign(existing, snapshot, {
-            id: nodeId,
-            x: Number.isFinite(existing.x) ? existing.x : nextX,
-            y: Number.isFinite(existing.y) ? existing.y : nextY,
-            vx: Number.isFinite(existing.vx) ? existing.vx : 0,
-            vy: Number.isFinite(existing.vy) ? existing.vy : 0,
-            semanticPhysics: snapshot.semanticPhysics || existing.semanticPhysics || {},
-          });
-          return existing;
-        }
-
-        return {
+        const fallbackRadius = Math.min(width, height) * 0.24;
+        const nextX = Number.isFinite(snapshot.x)
+          ? snapshot.x
+          : morphology.stage === "ingestion"
+            ? width * 0.14 + Math.cos(fallbackAngle) * fallbackRadius * 0.28
+            : morphology.stage === "resolution"
+              ? width * 0.8 + Math.cos(fallbackAngle) * fallbackRadius * 0.14
+              : width * 0.5 + Math.cos(fallbackAngle) * fallbackRadius;
+        const nextY = Number.isFinite(snapshot.y) ? snapshot.y : morphology.laneY + Math.sin(fallbackAngle) * fallbackRadius * 0.14;
+        const baseNode = {
           ...snapshot,
           id: nodeId,
           x: nextX,
           y: nextY,
           vx: Number.isFinite(snapshot.vx) ? snapshot.vx : 0,
           vy: Number.isFinite(snapshot.vy) ? snapshot.vy : 0,
+        };
+
+        if (existing) {
+          Object.assign(existing, baseNode, morphology, {
+            semanticPhysics: snapshot.semanticPhysics || existing.semanticPhysics || {},
+            fragments: snapshot.fragments || existing.fragments || collectNodeFragments(baseNode).fragments,
+          });
+          return existing;
+        }
+
+        return {
+          ...baseNode,
+          ...morphology,
           semanticPhysics: snapshot.semanticPhysics || {},
+          fragments: snapshot.fragments || collectNodeFragments(baseNode).fragments,
         };
       });
 
@@ -566,6 +851,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       }
 
       sceneRef.current = {
+        ...sceneRef.current,
         nodes: mergedNodes,
         links: mergedLinks,
         width,
@@ -577,10 +863,27 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
 
       mergedNodes.forEach((node) => {
         if (!nodeElementsRef.current.has(node.id)) {
-          const visual = createNodeVisual(node.id, (nodeId) => {
-            onNodeSelectRef.current?.({ ...nodeLookup.get(nodeId), id: nodeId, nodeId });
+          const visual = createNodeVisual(node.id, {
+            onHover: (nodeId) => {
+              sceneRef.current.hoveredNodeId = nodeId;
+              simulation.alphaTarget(0.18).restart();
+            },
+            onUnhover: (nodeId) => {
+              if (sceneRef.current.hoveredNodeId === nodeId) {
+                sceneRef.current.hoveredNodeId = null;
+              }
+            },
+            onSelect: (nodeId) => {
+              const selectedNode = nodeLookup.get(nodeId);
+              onNodeSelectRef.current?.({ ...selectedNode, id: nodeId, nodeId });
+            },
+            onActivate: () => {
+              sceneRef.current.interactionPulseUntil = performance.now() + 1200;
+              simulation.alphaTarget(0.3).restart();
+            },
           });
           nodeElementsRef.current.set(node.id, visual);
+          nodeElementsRef.current = new Map(nodeElementsRef.current);
           nodesLayerRef.current?.appendChild(visual.group);
         }
       });
@@ -610,133 +913,173 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       centerForce.x(width * 0.5).y(height * 0.5);
       linkForce.links(mergedLinks);
       collisionForce.radius((node) => {
-        const physics = node.semanticPhysics || {};
-        const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
-        return Math.max(44, physics.collisionRadius || (node.layoutWidth || 220) * (0.18 + activity * 0.14));
+        const body = projectNodeBody(node);
+        return Math.max(36, body.width * 0.22 + body.mass * 0.78);
       });
       simulation.nodes(mergedNodes);
-      simulation.alphaTarget(0.12).restart();
+      simulation.alphaTarget(selectedNodeId ? 0.18 : 0.06).restart();
 
-      if (renderSceneRef.current) {
-        renderSceneRef.current();
-      }
-    };
+      renderSceneRef.current = () => {
+        const { nodes, links, selectedNodeId: currentSelectedNodeId, hoveredNodeId: currentHoveredNodeId, neighborIds: currentNeighborIds, activityMap: currentActivityMap, width: currentWidth, height: currentHeight, tickTime } = sceneRef.current;
+        const nodeLookupNow = new Map(nodes.map((node) => [node.id, node]));
+        const focusNodeId = currentSelectedNodeId || currentHoveredNodeId || null;
 
-    renderSceneRef.current = () => {
-      const scene = sceneRef.current;
-      const { nodes, links, selectedNodeId: currentSelectedNodeId, neighborIds: currentNeighborIds, activityMap: currentActivityMap, width: currentWidth, height: currentHeight } = scene;
-      const nodeLookup = new Map(nodes.map((node) => [node.id, node]));
+        for (const node of nodes) {
+          const visual = nodeElementsRef.current.get(node.id);
+          if (!visual) {
+            continue;
+          }
 
-      for (const node of nodes) {
-        const visual = nodeElementsRef.current.get(node.id);
-        if (!visual) {
-          continue;
-        }
+          const activity = clamp((currentActivityMap.get(node.id) || 0) / 3.2, 0, 1);
+          const focusState = {
+            isSelected: currentSelectedNodeId && node.id === currentSelectedNodeId,
+            isHovered: currentHoveredNodeId && node.id === currentHoveredNodeId,
+            isNeighbor: focusNodeId && currentNeighborIds.has(node.id),
+          };
+          const depthState = projectNodeDepth({ ...node, activity }, currentWidth, currentHeight, focusState);
+          const body = projectNodeBody({ ...node, activity, distanceRatio: depthState.distanceRatio }, focusState);
+          const fragments = collectNodeFragments(node);
+          const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
+          const stage = String(node.stage || inferNodeStage(node));
+          const opacity = clamp((node.atmosphericOpacity ?? node.opacity ?? 0.84) * (focusState.isSelected ? 1 : focusState.isNeighbor ? 0.96 : focusState.isHovered ? 0.9 : resonance < 0.22 ? 0.58 : 0.9), 0.04, 1);
+          const depthScale = clamp(depthState.scale + (focusState.isSelected ? 0.22 : focusState.isHovered ? 0.1 : 0), 0.42, 2.3);
+          const x = node.x || 0;
+          const y = (node.y || 0) + depthState.lift;
 
-        const activity = clamp((currentActivityMap.get(node.id) || 0) / 3.2, 0, 1);
-        const distanceRatio = clamp(Math.hypot((node.x || currentWidth * 0.5) - currentWidth * 0.5, (node.y || currentHeight * 0.5) - currentHeight * 0.5) / Math.max(120, Math.hypot(currentWidth * 0.5, currentHeight * 0.5)), 0, 1);
-        const depthState = projectNodeDepth({ ...node, semanticActivity: activity }, currentWidth, currentHeight);
-        const body = projectNodeBody({ ...node, semanticActivity: activity, distanceRatio });
-        const isSelected = currentSelectedNodeId && node.id === currentSelectedNodeId;
-        const isNeighbor = currentSelectedNodeId && currentNeighborIds.has(node.id);
-        const resonance = clamp(Number(node.theoryResonanceScore || 0), 0, 1);
-        const focusBoost = isSelected ? 0.42 : isNeighbor ? 0.18 : 0;
-        const weakFade = resonance < 0.22 ? 0.7 : resonance < 0.45 ? 0.88 : 1;
-
-        setSvgElementAttributes(visual.group, {
-          transform: `translate(${node.x || 0}, ${((node.y || 0) + depthState.depthLift) || 0}) scale(${clamp(depthState.depthScale + focusBoost, 0.5, 2)})`,
-          opacity: clamp((node.atmosphericOpacity ?? node.opacity ?? 0.82) * weakFade * (0.18 + activity * 0.82) * (isSelected ? 1 : isNeighbor ? 0.94 : 0.74), 0.04, 1),
-          "data-selected": isSelected ? "true" : "false",
-          "data-neighbor": isNeighbor ? "true" : "false",
-        });
-
-        setSvgElementAttributes(visual.orbit, {
-          rx: body.width ? body.width * 0.6 : Math.max(58, (node.layoutWidth || 220) * 0.34),
-          ry: body.height ? body.height * 0.7 : Math.max(24, (node.layoutWidth || 220) * 0.1),
-          stroke: isSelected ? "#f6f0e7" : isNeighbor ? "#d9caa8" : "#ffffff",
-          strokeOpacity: isSelected ? 0.28 : isNeighbor ? 0.16 : 0.08,
-          strokeWidth: isSelected ? 1.6 : isNeighbor ? 1.2 : 0.9,
-          strokeDasharray: resonance < 0.3 ? "3 7" : null,
-        });
-
-        setSvgElementAttributes(visual.halo, {
-          rx: body.haloWidth ? body.haloWidth * 0.5 : Math.max(52, (node.layoutWidth || 220) * 0.32),
-          ry: body.haloHeight ? body.haloHeight * 0.5 : Math.max(26, (node.layoutWidth || 220) * 0.11),
-          fill: "#f3ebdf",
-          fillOpacity: clamp(0.06 + (body.activity || 0) * 0.14 + (isSelected ? 0.06 : 0), 0.03, 0.26),
-          stroke: "#f6f0e7",
-          strokeOpacity: isSelected ? 0.18 : 0.08,
-          strokeWidth: 1,
-          style: `filter: blur(${clamp(depthState.depthBlur * 1.2, 0.02, 0.7)}px);`,
-        });
-
-        setSvgElementAttributes(visual.body, {
-          rx: body.width ? body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
-          ry: body.height ? body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
-          fill: node.id === "theory-core-actional-space" ? "#f4d37a" : "#efe3ce",
-          fillOpacity: clamp(0.12 + body.resonance * 0.66 + body.activity * 0.12 + (isSelected ? 0.22 : isNeighbor ? 0.1 : 0), 0.08, 0.99),
-          stroke: "#ffffff",
-          strokeOpacity: clamp(0.1 + body.density * 0.22, 0.04, 0.36),
-          strokeWidth: clamp(0.72 + body.mass * 0.14 + (isSelected ? 0.18 : 0), 0.7, 2.1),
-        });
-
-        setSvgElementAttributes(visual.core, {
-          rx: body.coreWidth ? body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
-          ry: body.coreHeight ? body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
-          fill: "#fffaf0",
-          fillOpacity: clamp(0.1 + body.resonance * 0.4 + (isSelected ? 0.12 : 0), 0.06, 0.82),
-          style: `filter: blur(${clamp(depthState.depthBlur * 0.45, 0.01, 0.22)}px);`,
-        });
-
-        visual.particles.forEach((particle, particleIndex) => {
-          const angle = (particleIndex / Math.max(1, Math.min(3, node.concepts?.length || 3))) * Math.PI * 2;
-          setSvgElementAttributes(particle, {
-            cx: Math.cos(angle) * ((body.width || 40) * 0.22),
-            cy: Math.sin(angle) * ((body.height || 18) * 0.34),
-            r: 1.3 + body.activity * 1.1 + (isSelected ? 0.4 : 0),
-            fill: "#ffffff",
-            fillOpacity: clamp(0.18 + body.activity * 0.34 + (isSelected ? 0.18 : 0), 0.1, 0.82),
+          setSvgElementAttributes(visual.group, {
+            transform: `translate(${x}, ${y}) scale(${depthScale})`,
+            opacity,
+            "data-selected": focusState.isSelected ? "true" : "false",
+            "data-neighbor": focusState.isNeighbor ? "true" : "false",
+            "data-hovered": focusState.isHovered ? "true" : "false",
+            "data-stage": stage,
           });
-        });
-      }
 
-      for (const [edgeId, visual] of linkElementsRef.current.entries()) {
-        const edge = links.find((candidate) => candidate.id === edgeId);
-        if (!edge) {
-          continue;
+          setSvgElementAttributes(visual.wake, {
+            d: `M ${-body.width * 0.64} ${body.height * 0.05} C ${-body.width * 0.36} ${-body.height * (0.14 + body.activity * 0.08)}, ${-body.width * 0.1} ${body.height * (0.1 + body.activity * 0.06)}, ${body.width * 0.56} ${body.height * 0.08}`,
+            stroke: "#fff7ea",
+            strokeOpacity: clamp(0.08 + body.stability * 0.08 + (focusState.isSelected ? 0.1 : 0), 0.04, 0.3),
+            strokeWidth: clamp(0.8 + body.mass * 0.06, 0.6, 1.6),
+            style: `filter: blur(${clamp(depthState.blur * 1.1, 0.03, 0.9)}px);`,
+          });
+
+          setSvgElementAttributes(visual.orbit, {
+            rx: body.width ? body.width * 0.62 : Math.max(58, (node.layoutWidth || 220) * 0.34),
+            ry: body.height ? body.height * 0.72 : Math.max(24, (node.layoutWidth || 220) * 0.1),
+            stroke: focusState.isSelected ? "#f6f0e7" : focusState.isNeighbor ? "#ddcfb0" : "#ffffff",
+            strokeOpacity: focusState.isSelected ? 0.34 : focusState.isNeighbor ? 0.2 : 0.08,
+            strokeWidth: focusState.isSelected ? 1.8 : focusState.isNeighbor ? 1.3 : 0.8,
+            strokeDasharray: resonance < 0.28 ? "4 8" : null,
+            style: `filter: blur(${clamp(depthState.blur * 0.6, 0.02, 0.4)}px);`,
+          });
+
+          setSvgElementAttributes(visual.halo, {
+            rx: body.haloWidth ? body.haloWidth * 0.5 : Math.max(52, (node.layoutWidth || 220) * 0.32),
+            ry: body.haloHeight ? body.haloHeight * 0.5 : Math.max(26, (node.layoutWidth || 220) * 0.11),
+            fill: "url(#node-halo-gradient)",
+            fillOpacity: clamp(0.1 + body.activity * 0.12 + (focusState.isSelected ? 0.08 : 0), 0.04, 0.32),
+            stroke: "#f6f0e7",
+            strokeOpacity: focusState.isSelected ? 0.18 : 0.08,
+            strokeWidth: 1,
+            style: `filter: blur(${clamp(depthState.blur * 1.6, 0.03, 0.9)}px);`,
+          });
+
+          setSvgElementAttributes(visual.body, {
+            rx: body.width ? body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
+            ry: body.height ? body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
+            fill: node.id === "theory-core-actional-space" ? "#f4d37a" : "url(#node-body-gradient)",
+            fillOpacity: clamp(0.14 + body.resonance * 0.68 + body.activity * 0.14 + (focusState.isSelected ? 0.18 : focusState.isNeighbor ? 0.08 : 0), 0.08, 1),
+            stroke: "#ffffff",
+            strokeOpacity: clamp(0.08 + body.density * 0.24, 0.04, 0.4),
+            strokeWidth: clamp(0.72 + body.mass * 0.14 + (focusState.isSelected ? 0.2 : 0), 0.7, 2.3),
+          });
+
+          setSvgElementAttributes(visual.core, {
+            rx: body.coreWidth ? body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
+            ry: body.coreHeight ? body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
+            fill: "url(#node-core-gradient)",
+            fillOpacity: clamp(0.14 + body.resonance * 0.42 + (focusState.isSelected ? 0.16 : 0), 0.08, 0.92),
+            style: `filter: blur(${clamp(depthState.blur * 0.42, 0.01, 0.26)}px);`,
+          });
+
+          const orbitSeed = tickTime * 0.00035 + Number(node.flowSeed || 0);
+          visual.particles.forEach((particle, particleIndex) => {
+            const angle = orbitSeed + particleIndex * 1.7;
+            setSvgElementAttributes(particle, {
+              cx: Math.cos(angle) * (body.width || 40) * (0.18 + particleIndex * 0.02 + (focusState.isSelected ? 0.04 : 0)),
+              cy: Math.sin(angle) * (body.height || 18) * (0.24 + particleIndex * 0.03 + (focusState.isSelected ? 0.06 : 0)),
+              r: 1.1 + body.activity * 1.1 + (focusState.isSelected ? 0.5 : 0),
+              fill: "#ffffff",
+              fillOpacity: clamp(0.14 + body.activity * 0.38 + (focusState.isSelected ? 0.2 : 0), 0.08, 0.92),
+            });
+          });
+
+          const labelFontSize = clamp(10 + body.resonance * 4 + body.activity * 2 + (focusState.isSelected ? 2 : 0), 10, 17);
+          const metaFontSize = clamp(labelFontSize * 0.66, 8, 11);
+
+          setSvgElementAttributes(visual.label, {
+            x: 0,
+            y: -body.height * 0.04,
+            fill: "#fffaf2",
+            opacity: clamp(0.45 + body.resonance * 0.44 + (focusState.isSelected ? 0.22 : 0) + (focusState.isNeighbor ? 0.12 : 0), 0.18, 1),
+            "font-size": `${labelFontSize}px`,
+            "letter-spacing": "0.03em",
+            "font-weight": 600,
+          });
+          visual.label.textContent = fragments.primary;
+
+          setSvgElementAttributes(visual.meta, {
+            x: 0,
+            y: body.height * 0.2,
+            fill: "#e6d6b8",
+            opacity: clamp(0.2 + body.stability * 0.32 + (focusState.isSelected ? 0.18 : 0), 0.12, 0.96),
+            "font-size": `${metaFontSize}px`,
+            "letter-spacing": "0.08em",
+            "font-weight": 500,
+          });
+          visual.meta.textContent = fragments.secondary || [stage, body.mass > 3 ? "heavy" : "light"].filter(Boolean).join(" · ");
         }
 
-        const left = nodeLookup.get(edge.source?.id || edge.sourceNode?.id || edge.source);
-        const right = nodeLookup.get(edge.target?.id || edge.targetNode?.id || edge.target);
-        if (!left || !right) {
-          continue;
+        for (const [edgeId, visual] of linkElementsRef.current.entries()) {
+          const edge = links.find((candidate) => candidate.id === edgeId);
+          if (!edge) {
+            continue;
+          }
+
+          const left = nodeLookupNow.get(edge.source?.id || edge.sourceNode?.id || edge.source);
+          const right = nodeLookupNow.get(edge.target?.id || edge.targetNode?.id || edge.target);
+          if (!left || !right) {
+            continue;
+          }
+
+          const semanticStrength = edge.semanticStrength ?? edge.score ?? edge.weight ?? 0;
+          const selectedEdge = focusNodeId && (left.id === focusNodeId || right.id === focusNodeId);
+          const depthSpan = Math.abs((left.depth || 0.5) - (right.depth || 0.5));
+          const midpointX = (left.x + right.x) * 0.5;
+          const midpointY = (left.y + right.y) * 0.5;
+          const dx = right.x - left.x;
+          const dy = right.y - left.y;
+          const distance = Math.max(1, Math.hypot(dx, dy));
+          const nx = -dy / distance;
+          const ny = dx / distance;
+          const tension = clamp(0.04 + semanticStrength * 0.12 + depthSpan * 0.08 + Math.min(0.26, (edge.confidence || 0) * 0.18), 0.04, 0.56);
+          const curveX = midpointX + nx * distance * tension;
+          const curveY = midpointY + ny * distance * tension * 0.74;
+          const breathing = 0.65 + Math.sin(tickTime * 0.0018 + hashString(edge.id || edge.source?.id || edge.target?.id)) * 0.18;
+
+          setSvgElementAttributes(visual, {
+            d: `M ${left.x} ${left.y} Q ${curveX} ${curveY} ${right.x} ${right.y}`,
+            stroke: edge.type === "wiki" || edge.type === "theory" ? "#c9a227" : "#ffffff",
+            strokeOpacity: Math.min(0.98, Math.max(0.04, (edge.opacity ?? 0.06) + Math.min(0.52, semanticStrength * 0.26) + Math.min(0.24, (edge.confidence || 0) * 0.2) + (selectedEdge ? 0.24 : 0) - (focusNodeId && !selectedEdge ? 0.16 : 0))),
+            strokeWidth: Math.max(0.46, 0.52 + semanticStrength * 0.68 + Math.min(0.52, (edge.confidence || 0) * 0.4) + (selectedEdge ? 0.42 : 0)),
+            strokeDasharray: semanticStrength < 0.24 ? "5 11" : null,
+            strokeDashoffset: `${Math.round(tickTime * -0.03)}`,
+            style: `filter: blur(${clamp(1.2 - semanticStrength * 0.32, 0.12, 1.38)}px); opacity:${breathing};`,
+          });
         }
+      };
 
-        const semanticStrength = edge.semanticStrength ?? edge.score ?? edge.weight ?? 0;
-        const selectedEdge = currentSelectedNodeId && (left.id === currentSelectedNodeId || right.id === currentSelectedNodeId);
-        const leftZ = left.z ?? 1;
-        const rightZ = right.z ?? 1;
-        const depthSpan = Math.abs(leftZ - rightZ);
-        const midpointX = (left.x + right.x) * 0.5;
-        const midpointY = (left.y + right.y) * 0.5;
-        const dx = right.x - left.x;
-        const dy = right.y - left.y;
-        const distance = Math.max(1, Math.hypot(dx, dy));
-        const nx = -dy / distance;
-        const ny = dx / distance;
-        const tension = clamp(0.04 + semanticStrength * 0.12 + depthSpan * 0.08 + Math.min(0.26, (edge.confidence || 0) * 0.18), 0.04, 0.52);
-        const curveX = midpointX + nx * distance * tension;
-        const curveY = midpointY + ny * distance * tension * 0.72;
-        const d = `M ${left.x} ${left.y} Q ${curveX} ${curveY} ${right.x} ${right.y}`;
-
-        setSvgElementAttributes(visual, {
-          d,
-          stroke: edge.type === "wiki" || edge.type === "theory" ? "#c9a227" : "#ffffff",
-          strokeOpacity: Math.min(0.98, Math.max(0.03, (edge.opacity ?? 0.06) + Math.min(0.48, semanticStrength * 0.24) + Math.min(0.24, (edge.confidence || 0) * 0.2) + (selectedEdge ? 0.28 : 0) - (currentSelectedNodeId && !selectedEdge ? 0.16 : 0))),
-          strokeWidth: Math.max(0.42, 0.46 + semanticStrength * 0.58 + Math.min(0.5, (edge.confidence || 0) * 0.38) + (selectedEdge ? 0.36 : 0)),
-          style: `filter: blur(${clamp(1.42 - semanticStrength * 0.34, 0.1, 1.5)}px);`,
-        });
-      }
+      renderSceneRef.current();
     };
 
     syncScene();
