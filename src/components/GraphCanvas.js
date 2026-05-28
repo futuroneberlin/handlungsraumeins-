@@ -332,33 +332,20 @@ function setSvgElementAttributes(element, attributes = {}) {
 }
 
 function createNodeVisual(nodeId, handlers = {}) {
-  const group = createSvgElement("g", { "data-node-id": nodeId, style: "pointer-events:auto;cursor:pointer" });
+  // Render nodes as subtle yellow mesh elements in the background
+  const group = createSvgElement("g", { "data-node-id": nodeId, style: "pointer-events:none" });
   const wake = createSvgElement("path", { fill: "none", pointerEvents: "none" });
-  const orbit = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", pointerEvents: "none" });
-  const halo = createSvgElement("ellipse", { cx: 0, cy: 0, pointerEvents: "none" });
-  const body = createSvgElement("ellipse", { cx: 0, cy: 0, pointerEvents: "none" });
-  const core = createSvgElement("ellipse", { cx: 0, cy: 0, pointerEvents: "none" });
-  const label = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit" });
-  const meta = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit" });
-  const particles = [0, 1, 2, 3].map(() => createSvgElement("circle", { cx: 0, cy: 0, pointerEvents: "none" }));
+  const orbit = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#c9a227", "stroke-opacity": 0.08, pointerEvents: "none" });
+  const halo = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#c9a227", "stroke-opacity": 0.06, pointerEvents: "none" });
+  const body = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#c9a227", "stroke-opacity": 0.09, pointerEvents: "none" });
+  const core = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#c9a227", "stroke-opacity": 0.12, pointerEvents: "none" });
+  const label = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit", fill: "#c9a227", "fill-opacity": 0.08 });
+  const meta = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit", fill: "#c9a227", "fill-opacity": 0.06 });
+  const particles = [0, 1, 2, 3].map(() => createSvgElement("circle", { cx: 0, cy: 0, fill: "#c9a227", "fill-opacity": 0.06, pointerEvents: "none" }));
 
   group.append(wake, orbit, halo, body, core, ...particles, label, meta);
 
-  group.addEventListener("pointerenter", (event) => {
-    event.stopPropagation();
-    handlers.onHover?.(nodeId);
-  });
-
-  group.addEventListener("pointerleave", (event) => {
-    event.stopPropagation();
-    handlers.onUnhover?.(nodeId);
-  });
-
-  group.addEventListener("click", (event) => {
-    event.stopPropagation();
-    handlers.onSelect?.(nodeId);
-    handlers.onActivate?.(nodeId);
-  });
+  // Node interactions are disabled for the background mesh
 
   return { group, wake, orbit, halo, body, core, label, meta, particles };
 }
@@ -369,6 +356,8 @@ function createLinkVisual() {
     strokeLinecap: "round",
     strokeLinejoin: "round",
     pointerEvents: "none",
+    stroke: "#c9a227",
+    "stroke-opacity": 0.06,
     markerEnd: "url(#relation-arrow)",
   });
 }
@@ -1105,7 +1094,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     createElement("svg", {
       ref: svgRef,
       className: "edge-layer",
-      style: { position: "absolute", inset: 0, pointerEvents: "auto" },
+      style: { position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 },
       width: "100%",
       height: "100%",
       viewBox: `0 0 960 560`,
