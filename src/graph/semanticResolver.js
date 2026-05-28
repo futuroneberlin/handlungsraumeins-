@@ -1,5 +1,6 @@
 import { createEmergentCategories, createSemanticEdges, updateRelationLayer } from "../../core/relations.js";
-import { THEORY_CORE_TEXT, synthesizeConceptualStatement, theoryResonanceProfile, stabilizeTheoryStatement, evaluateTheoryResonance, evaluateNodeTheoryResonance } from "../../core/theoryModel.js";
+import { THEORY_CORE_TEXT, synthesizeConceptualStatement, theoryResonanceProfile, stabilizeTheoryStatement } from "../../core/theoryModel.js";
+import { evaluateTheoryResonance, evaluateNodeTheoryResonance } from "../../core/theoryOntology.js";
 
 export function refreshSemanticTopology(state, timestamp = performance.now()) {
   const nodes = Array.isArray(state.nodes) ? state.nodes : [];

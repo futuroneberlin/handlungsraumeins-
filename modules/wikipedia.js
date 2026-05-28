@@ -1,27 +1,19 @@
-import { evaluateTheoryResonance } from "../core/theoryModel.js";
+import { evaluateTheoryResonance } from "../core/theoryOntology.js";
 
 const DEFAULT_ENDPOINT = "https://en.wikipedia.org/w/api.php";
 const REST_SUMMARY_ENDPOINT = "https://en.wikipedia.org/api/rest_v1/page/summary/";
 
-const ALLOWED_THEME_TERMS = [
-  "joseph beuys",
-  "social sculpture",
-  "process art",
-  "participatory art",
-  "relational aesthetics",
-  "architecture",
-  "space",
-  "embodiment",
-  "temporality",
-  "collective practice",
-  "aesthetic experience",
-  "john dewey",
-  "georg w bertram",
-  "sculpture",
-  "performance",
-  "ritual",
-  "urban practice",
-  "spatial theory",
+const CURATED_SEEDS = [
+  "Joseph Beuys",
+  "Social Sculpture",
+  "John Dewey",
+  "Georg W. Bertram",
+  "Process Art",
+  "Relational Aesthetics",
+  "Embodied Cognition",
+  "Participatory Art",
+  "Spatial Practice",
+  "Performance Art",
 ];
 
 const NOISE_PATTERNS = [
@@ -84,7 +76,7 @@ function matchesAllowedTheme(value) {
     return false;
   }
 
-  return ALLOWED_THEME_TERMS.some((term) => normalized.includes(term));
+  return CURATED_SEEDS.some((term) => normalized.includes(normalizeTerm(term).toLowerCase()));
 }
 
 function toConceptKeywords(title, summary = "", categories = []) {
@@ -161,6 +153,10 @@ function extractListTitles(items = [], prefix = "") {
 export async function fetchWikipediaEntry(term) {
   const query = normalizeTerm(term);
   if (!query) {
+    return null;
+  }
+
+  if (!matchesAllowedTheme(query)) {
     return null;
   }
 

@@ -1,4 +1,5 @@
-import { theoryAffinity, theoryResonanceTerms, stabilizeTheoryStatement, evaluateNodeTheoryResonance, evaluateTheoryResonance } from "./theoryModel.js";
+import { theoryAffinity, theoryResonanceTerms, stabilizeTheoryStatement } from "./theoryModel.js";
+import { evaluateNodeTheoryResonance, evaluateTheoryResonance } from "./theoryOntology.js";
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -42,86 +43,44 @@ function overlap(leftValues = [], rightValues = []) {
 }
 
 function relationScore(left, right) {
-  const leftResonance = evaluateNodeTheoryResonance(left, { minScore: 1.8 });
-  const rightResonance = evaluateNodeTheoryResonance(right, { minScore: 1.8 });
-  const leftVector = left?.conceptVector || buildConceptVector(left);
-  const rightVector = right?.conceptVector || buildConceptVector(right);
-  const sharedConcepts = sharedConceptOverlap(leftVector, rightVector);
-  const leftKeywords = collectSignals(left);
-  const rightKeywords = collectSignals(right);
-  const sharedKeywords = overlap(leftKeywords, rightKeywords);
-  const sharedCategories = overlap(left.wikiCategories || left.categories || [], right.wikiCategories || right.categories || []);
-  const sharedLinks = overlap(left.wikiLinks || [], right.wikiLinks || []);
-  const leftTokens = normalizeTokenList(leftKeywords.flatMap((value) => tokenize(value)));
-  const rightTokens = normalizeTokenList(rightKeywords.flatMap((value) => tokenize(value)));
-  const sharedTokens = overlap(leftTokens, rightTokens);
-  const leftTheorySignals = theoryResonanceTerms(left);
-  const rightTheorySignals = theoryResonanceTerms(right);
-  const sharedTheorySignals = overlap(leftTheorySignals, rightTheorySignals);
-  const leftIndex = Number.isFinite(left.index) ? left.index : Number.isFinite(left.sequenceIndex) ? left.sequenceIndex : 0;
-  const rightIndex = Number.isFinite(right.index) ? right.index : Number.isFinite(right.sequenceIndex) ? right.sequenceIndex : 0;
-  const proximityScore = Math.max(0, 1 - Math.abs(leftIndex - rightIndex) / 24);
-  const laneScore = left.lane === right.lane ? 0.24 : 0;
-  const phaseScore = left.phase === right.phase ? 0.2 : 0;
-  const sourceScore = left.source === right.source ? 0.25 : 0;
-  const sharedScore = 0;
-  const tokenScore = 0;
-  const categoryScore = 0;
-  const linkScore = 0;
-  const massScore = Math.min(left.weight || 0.5, right.weight || 0.5) * 0.45;
-  const groupLeft = left.semanticGroup || null;
-  const groupRight = right.semanticGroup || null;
-  const groupScore = groupLeft && groupRight && groupLeft === groupRight ? 0.72 : 0;
-  const bridgePairs = new Set([
-    "Raum|Konstruktion",
-    "Konstruktion|Raum",
-    "Handlung|Gesellschaft",
-    "Gesellschaft|Handlung",
-    "Handlung|Kunst",
-    "Kunst|Handlung",
-    "Kunst|Gesellschaft",
-    "Gesellschaft|Kunst",
-  ]);
-  const bridgeScore = bridgePairs.has(`${groupLeft}|${groupRight}`) ? 0.34 : 0;
-  const theoryLeft = theoryAffinity(left);
-  const theoryRight = theoryAffinity(right);
-  const theoryCoreOverlap = sharedTheorySignals.filter((signal) => /participation|temporality|transformation|interaction|process|space|action/i.test(signal));
-  const pairResonance = evaluateTheoryResonance([
-    ...(leftResonance.activatedDimensions || []),
-    ...(rightResonance.activatedDimensions || []),
-    ...sharedConcepts,
-    ...sharedTheorySignals,
-    left.semanticLabel,
-    right.semanticLabel,
-  ], { minScore: 1.65 });
-  const theoryBoost = Math.min(3, (theoryLeft + theoryRight) * 0.26 + theoryCoreOverlap.length * 0.82 + Math.min(1.28, pairResonance.score * 0.42));
-  const repetitionScore = Math.min(1.2, Math.min(left.appearanceCount || 1, right.appearanceCount || 1) * 0.12);
-  const conceptScore = Math.min(2.8, sharedConceptWeight(leftVector, rightVector, sharedConcepts) * 0.74 + sharedConcepts.length * 0.34);
-  const semanticSimilarity = Math.min(3.2, conceptScore + pairResonance.score * 0.34 + sharedConcepts.length * 0.14 + theoryCoreOverlap.length * 0.18);
-  const contextualProximity = Math.min(1.2, (proximityScore * 0.52) + phaseScore * 0.46);
-  const structuralSimilarity = Math.min(1.8, ((leftVector?.density || 0) + (rightVector?.density || 0)) * 0.34 + Math.min(leftVector?.theoryResonanceScore || 0, rightVector?.theoryResonanceScore || 0));
-  const reinforcement = Math.min(1.5, repetitionScore * 0.26 + sharedConcepts.length * 0.28 + theoryCoreOverlap.length * 0.42);
-  const narrative = composeRelationNarrative({ left, right, leftVector, rightVector, sharedConcepts, sharedTheorySignals, sharedCategories, sharedLinks, sharedKeywords, theoryBoost, proximityScore: contextualProximity });
+  const leftResonance = evaluateNodeTheoryResonance(left, { minScore: 1.1 });
+  const rightResonance = evaluateNodeTheoryResonance(right, { minScore: 1.1 });
+  const sharedDimensions = (leftResonance.activatedDimensions || []).filter((dimension) => (rightResonance.activatedDimensions || []).includes(dimension));
+  const sharedDimensionSet = [...new Set(sharedDimensions)];
+  const dimensionWeights = {
+    participation: 1.0,
+    temporality: 0.92,
+    embodiment: 0.88,
+    spatialPractice: 0.95,
+    aestheticExperience: 0.9,
+  };
+  const resonanceScore = Number(sharedDimensionSet.reduce((total, dimension) => total + (dimensionWeights[dimension] || 0.5), 0).toFixed(3));
+  const support = Number(Math.min(1.6, ((leftResonance.score || 0) + (rightResonance.score || 0)) * 0.18).toFixed(3));
+  const totalScore = Number(Math.min(4, resonanceScore + support + (sharedDimensionSet.length >= 3 ? 0.32 : sharedDimensionSet.length >= 2 ? 0.16 : 0)).toFixed(3));
+  const dominantDimension = sharedDimensionSet[0] || leftResonance.dominantDimension || rightResonance.dominantDimension || null;
+
+  if (!sharedDimensionSet.length || totalScore < 1.05) {
+    return {
+      reject: true,
+      resonanceScore: 0,
+      sharedDimensions: [],
+      explanation: "",
+    };
+  }
+
+  const readableDimensions = sharedDimensionSet.join(" + ");
+  const explanation = sharedDimensionSet.includes("participation") || sharedDimensionSet.includes("embodiment")
+    ? `Both concepts activate ${readableDimensions} as sculptural process.`
+    : `Both concepts activate ${readableDimensions} within the Actional Space of Aesthetic Practice.`;
+
   return {
-    score: semanticSimilarity + contextualProximity + structuralSimilarity + reinforcement + massScore + groupScore + bridgeScore + theoryBoost,
-    semanticStrength: Math.min(3.2, conceptScore + theoryCoreOverlap.length * 0.45 + contextualProximity * 0.36 + structuralSimilarity * 0.32),
-    sharedKeywords,
-    sharedCategories,
-    sharedLinks,
-    sharedTokens,
-    sharedTheorySignals,
-    theoryCoreOverlap,
-    sharedConcepts,
-    theoryBoost,
-    repetitionScore,
-    contextualProximity,
-    leftVector,
-    rightVector,
+    reject: false,
+    resonanceScore: totalScore,
+    sharedDimensions: sharedDimensionSet,
+    dominantDimension,
+    explanation,
     leftResonance,
     rightResonance,
-    pairResonance,
-    label: narrative.label,
-    explanation: narrative.explanation,
   };
 }
 
@@ -432,51 +391,17 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
       const left = safeNodes[leftIndex];
       const right = safeNodes[rightIndex];
       const relation = relationScore(left, right);
-      const { score, sharedKeywords, sharedCategories, sharedLinks, sharedTokens, sharedTheorySignals, theoryCoreOverlap, sharedConcepts, theoryBoost, repetitionScore, contextualProximity, leftVector, rightVector, semanticStrength, leftResonance, rightResonance, pairResonance } = relation;
-        const sameCategory = sharedCategories.length > 0 && String(left.semanticGroup || left.category || "").toLowerCase() === String(right.semanticGroup || right.category || "").toLowerCase();
-        const theoryDriven = theoryBoost > 0.88 || sharedTheorySignals.length > 0 || pairResonance.score > 2.1;
-      const sequentialBoost = rightIndex === leftIndex + 1 ? 0.18 : 0;
-      const proximityBoost = left.phase === right.phase ? 0.1 : 0;
-      const adjustedScore = score + sequentialBoost + proximityBoost;
-        const overlapStrength = sharedConcepts.length + sharedTheorySignals.length * 1.6 + pairResonance.score * 0.4;
-        const reinforcementScore = repetitionScore + (sameCategory ? 0.2 : 0) + (left.phase === "stabilization" && right.phase === "stabilization" ? 0.24 : 0);
-      const anchorLink = left.isTheoryCore || right.isTheoryCore || left.isTheoryAttractor || right.isTheoryAttractor;
-
-      if (leftResonance.reject || rightResonance.reject || pairResonance.reject) {
+      if (relation.reject) {
         continue;
       }
 
-        if (semanticStrength < 0.92 || adjustedScore < 1.1 || contextualProximity < 0.36 || reinforcementScore < 0.16) {
-        continue;
-      }
-
-      if (anchorLink && (theoryBoost < 0.92 || sharedTheorySignals.length === 0)) {
-        continue;
-      }
-
-      if (!theoryDriven && sharedConcepts.length === 0 && pairResonance.score < 2.0) {
-        continue;
-      }
-
-      const type = theoryDriven
-        ? "theory"
-        : sharedConcepts.length > 0 && sharedTheorySignals.length > 0
-          ? "category"
-          : sharedKeywords.length > 0 || sharedTokens.length > 0
-              ? "semantic"
-              : left.clusterKey === right.clusterKey
-                ? "drift"
-                : "semantic";
-      const ttl = type === "drift" ? 9800 : 18000;
-      const confidence = clamp((adjustedScore / 4.9) + Math.min(0.22, theoryBoost * 0.07) + Math.min(0.12, repetitionScore * 0.06), 0.18, 0.98);
+      const confidence = clamp(0.18 + relation.resonanceScore * 0.18, 0.18, 0.98);
+      const ttl = relation.sharedDimensions.length >= 3 ? 22000 : relation.sharedDimensions.length >= 2 ? 18000 : 14000;
       const semanticSignature = semanticHash([
         left.id || leftIndex,
         right.id || rightIndex,
-        relation.label,
-        sharedConcepts.join("|"),
-        sharedTheorySignals.join("|"),
-        String(sharedCategories[0] || ""),
-        String(sharedLinks[0] || ""),
+        relation.sharedDimensions.join("|"),
+        relation.dominantDimension || "",
       ]);
 
       edges.push({
@@ -487,23 +412,17 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
         targetIndex: rightIndex,
         leftIndex,
         rightIndex,
-        score: adjustedScore,
-        weight: adjustedScore,
+        score: relation.resonanceScore,
+        weight: relation.resonanceScore,
         confidence,
-        type,
-        label: relation.label,
-        semanticLabel: relation.label,
-        semanticStrength,
+        type: "theory",
+        label: relation.explanation,
+        semanticLabel: relation.dominantDimension || relation.explanation,
+        semanticStrength: relation.resonanceScore,
         semanticSignature,
-        keywords: sharedKeywords,
-        sharedConcepts,
-        sharedCategories,
-        sharedLinks,
-        sharedTokens,
-        sharedTheorySignals,
-        theoryCoreOverlap,
-        theoryDimensions: pairResonance.activatedDimensions,
-        theoryValidationScore: pairResonance.score,
+        sharedDimensions: relation.sharedDimensions,
+        theoryDimensions: relation.sharedDimensions,
+        theoryValidationScore: relation.resonanceScore,
         explanation: relation.explanation,
         bornAt: timestamp,
         ttl,

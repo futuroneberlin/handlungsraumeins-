@@ -1,7 +1,7 @@
 import { createElement, useEffect, useMemo, useRef } from "react";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
 import { createGraphActions } from "../graph/runtime.js";
-import { useGraphVersion, graphStore } from "../graph/graphState.js";
+import { graphStore } from "../graph/graphState.js";
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -220,8 +220,6 @@ function createLinkVisual() {
 
 export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges = null, className = "", style, ...rest }) {
   const effectiveStore = store || graphStore;
-  useGraphVersion(effectiveStore);
-  const state = effectiveStore.getState();
   const containerRef = useRef(null);
   const svgRef = useRef(null);
   const simulationRef = useRef(null);
@@ -478,143 +476,153 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
   }, []);
 
   useEffect(() => {
-    const svg = svgRef.current;
-    const simulation = simulationRef.current;
-    if (!svg || !simulation || !linkForceRef.current || !centerForceRef.current || !collisionForceRef.current) {
-      return;
-    }
-
-    const hasRealNodes = (state.nodes || []).length > 0;
-    const sourceNodes = hasRealNodes ? (state.nodes || []) : (debugNodes || []);
-    const sourceEdges = hasRealNodes ? (state.edges || []) : (debugEdges || []);
-    const width = Math.max(320, state.viewport?.width || 960);
-    const height = Math.max(240, state.viewport?.height || 560);
-    const selectedNodeId = state.selectedNode || null;
-
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-
-    const existingNodes = new Map(sceneRef.current.nodes.map((node) => [node.id, node]));
-    const mergedNodes = sourceNodes.map((snapshot, index) => {
-      const nodeId = extractNodeId(snapshot) || `node-${index}`;
-      const existing = existingNodes.get(nodeId);
-      const fallbackAngle = (index / Math.max(1, sourceNodes.length)) * Math.PI * 2;
-      const fallbackRadius = Math.min(width, height) * 0.26;
-      const nextX = Number.isFinite(snapshot.x) ? snapshot.x : width * 0.5 + Math.cos(fallbackAngle) * fallbackRadius;
-      const nextY = Number.isFinite(snapshot.y) ? snapshot.y : height * 0.5 + Math.sin(fallbackAngle) * fallbackRadius;
-
-      if (existing) {
-        Object.assign(existing, snapshot, {
-          id: nodeId,
-          x: Number.isFinite(existing.x) ? existing.x : nextX,
-          y: Number.isFinite(existing.y) ? existing.y : nextY,
-          vx: Number.isFinite(existing.vx) ? existing.vx : 0,
-          vy: Number.isFinite(existing.vy) ? existing.vy : 0,
-          semanticPhysics: snapshot.semanticPhysics || existing.semanticPhysics || {},
-        });
-        return existing;
+    const syncScene = () => {
+      const svg = svgRef.current;
+      const simulation = simulationRef.current;
+      const centerForce = centerForceRef.current;
+      const linkForce = linkForceRef.current;
+      const collisionForce = collisionForceRef.current;
+      if (!svg || !simulation || !centerForce || !linkForce || !collisionForce) {
+        return;
       }
 
-      return {
-        ...snapshot,
-        id: nodeId,
-        x: nextX,
-        y: nextY,
-        vx: Number.isFinite(snapshot.vx) ? snapshot.vx : 0,
-        vy: Number.isFinite(snapshot.vy) ? snapshot.vy : 0,
-        semanticPhysics: snapshot.semanticPhysics || {},
-      };
-    });
+      const state = effectiveStore.getState();
+      const hasRealNodes = (state.nodes || []).length > 0;
+      const sourceNodes = hasRealNodes ? (state.nodes || []) : (debugNodes || []);
+      const sourceEdges = hasRealNodes ? (state.edges || []) : (debugEdges || []);
+      const width = Math.max(320, state.viewport?.width || 960);
+      const height = Math.max(240, state.viewport?.height || 560);
+      const selectedNodeId = state.selectedNode || null;
 
-    const nodeLookup = new Map(mergedNodes.map((node) => [node.id, node]));
-    const activityMap = createFeedActivityIndex({ ...state, nodes: mergedNodes });
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
-    const mergedLinks = sourceEdges
-      .slice(0, 900)
-      .map((edge, edgeIndex) => {
-        const sourceNode = resolveEndpoint(edge.source ?? edge.leftId ?? edge.sourceId ?? edge.leftIndex, nodeLookup, mergedNodes);
-        const targetNode = resolveEndpoint(edge.target ?? edge.rightId ?? edge.targetId ?? edge.rightIndex, nodeLookup, mergedNodes);
-        if (!sourceNode || !targetNode) {
-          return null;
+      const existingNodes = new Map(sceneRef.current.nodes.map((node) => [node.id, node]));
+      const mergedNodes = sourceNodes.map((snapshot, index) => {
+        const nodeId = extractNodeId(snapshot) || `node-${index}`;
+        const existing = existingNodes.get(nodeId);
+        const fallbackAngle = (index / Math.max(1, sourceNodes.length)) * Math.PI * 2;
+        const fallbackRadius = Math.min(width, height) * 0.26;
+        const nextX = Number.isFinite(snapshot.x) ? snapshot.x : width * 0.5 + Math.cos(fallbackAngle) * fallbackRadius;
+        const nextY = Number.isFinite(snapshot.y) ? snapshot.y : height * 0.5 + Math.sin(fallbackAngle) * fallbackRadius;
+
+        if (existing) {
+          Object.assign(existing, snapshot, {
+            id: nodeId,
+            x: Number.isFinite(existing.x) ? existing.x : nextX,
+            y: Number.isFinite(existing.y) ? existing.y : nextY,
+            vx: Number.isFinite(existing.vx) ? existing.vx : 0,
+            vy: Number.isFinite(existing.vy) ? existing.vy : 0,
+            semanticPhysics: snapshot.semanticPhysics || existing.semanticPhysics || {},
+          });
+          return existing;
         }
 
         return {
-          ...edge,
-          id: edge.id || `edge-${edgeIndex}`,
-          source: sourceNode,
-          target: targetNode,
-          sourceNode,
-          targetNode,
+          ...snapshot,
+          id: nodeId,
+          x: nextX,
+          y: nextY,
+          vx: Number.isFinite(snapshot.vx) ? snapshot.vx : 0,
+          vy: Number.isFinite(snapshot.vy) ? snapshot.vy : 0,
+          semanticPhysics: snapshot.semanticPhysics || {},
         };
-      })
-      .filter(Boolean);
+      });
 
-    const neighborIds = new Set();
-    if (selectedNodeId) {
-      for (const edge of mergedLinks) {
-        const sourceId = String(edge.source?.id || edge.sourceNode?.id || edge.source || "");
-        const targetId = String(edge.target?.id || edge.targetNode?.id || edge.target || "");
-        if (sourceId === selectedNodeId) {
-          neighborIds.add(targetId);
-        }
-        if (targetId === selectedNodeId) {
-          neighborIds.add(sourceId);
+      const nodeLookup = new Map(mergedNodes.map((node) => [node.id, node]));
+      const activityMap = createFeedActivityIndex({ ...state, nodes: mergedNodes });
+
+      const mergedLinks = sourceEdges
+        .slice(0, 900)
+        .map((edge, edgeIndex) => {
+          const sourceNode = resolveEndpoint(edge.source ?? edge.leftId ?? edge.sourceId ?? edge.leftIndex, nodeLookup, mergedNodes);
+          const targetNode = resolveEndpoint(edge.target ?? edge.rightId ?? edge.targetId ?? edge.rightIndex, nodeLookup, mergedNodes);
+          if (!sourceNode || !targetNode) {
+            return null;
+          }
+
+          return {
+            ...edge,
+            id: edge.id || `edge-${edgeIndex}`,
+            source: sourceNode,
+            target: targetNode,
+            sourceNode,
+            targetNode,
+          };
+        })
+        .filter(Boolean);
+
+      const neighborIds = new Set();
+      if (selectedNodeId) {
+        for (const edge of mergedLinks) {
+          const sourceId = String(edge.source?.id || edge.sourceNode?.id || edge.source || "");
+          const targetId = String(edge.target?.id || edge.targetNode?.id || edge.target || "");
+          if (sourceId === selectedNodeId) {
+            neighborIds.add(targetId);
+          }
+          if (targetId === selectedNodeId) {
+            neighborIds.add(sourceId);
+          }
         }
       }
-    }
 
-    sceneRef.current = {
-      nodes: mergedNodes,
-      links: mergedLinks,
-      width,
-      height,
-      selectedNodeId,
-      activityMap,
-      neighborIds,
+      sceneRef.current = {
+        nodes: mergedNodes,
+        links: mergedLinks,
+        width,
+        height,
+        selectedNodeId,
+        activityMap,
+        neighborIds,
+      };
+
+      mergedNodes.forEach((node) => {
+        if (!nodeElementsRef.current.has(node.id)) {
+          const visual = createNodeVisual(node.id, (nodeId) => {
+            onNodeSelectRef.current?.({ ...nodeLookup.get(nodeId), id: nodeId, nodeId });
+          });
+          nodeElementsRef.current.set(node.id, visual);
+          nodesLayerRef.current?.appendChild(visual.group);
+        }
+      });
+
+      for (const [nodeId, visual] of nodeElementsRef.current.entries()) {
+        if (!nodeLookup.has(nodeId)) {
+          visual.group.remove();
+          nodeElementsRef.current.delete(nodeId);
+        }
+      }
+
+      mergedLinks.forEach((edge) => {
+        if (!linkElementsRef.current.has(edge.id)) {
+          const visual = createLinkVisual();
+          linkElementsRef.current.set(edge.id, visual);
+          linksLayerRef.current?.appendChild(visual);
+        }
+      });
+
+      for (const [edgeId, visual] of linkElementsRef.current.entries()) {
+        if (!mergedLinks.some((edge) => edge.id === edgeId)) {
+          visual.remove();
+          linkElementsRef.current.delete(edgeId);
+        }
+      }
+
+      centerForce.x(width * 0.5).y(height * 0.5);
+      linkForce.links(mergedLinks);
+      collisionForce.radius((node) => {
+        const physics = node.semanticPhysics || {};
+        const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
+        return Math.max(44, physics.collisionRadius || (node.layoutWidth || 220) * (0.18 + activity * 0.14));
+      });
+      simulation.nodes(mergedNodes);
+      simulation.alphaTarget(0.12).restart();
+
+      if (renderSceneRef.current) {
+        renderSceneRef.current();
+      }
     };
 
-    mergedNodes.forEach((node) => {
-      if (!nodeElementsRef.current.has(node.id)) {
-        const visual = createNodeVisual(node.id, (nodeId) => {
-          onNodeSelectRef.current?.({ ...nodeLookup.get(nodeId), id: nodeId, nodeId });
-        });
-        nodeElementsRef.current.set(node.id, visual);
-        nodesLayerRef.current?.appendChild(visual.group);
-      }
-    });
-
-    for (const [nodeId, visual] of nodeElementsRef.current.entries()) {
-      if (!nodeLookup.has(nodeId)) {
-        visual.group.remove();
-        nodeElementsRef.current.delete(nodeId);
-      }
-    }
-
-    mergedLinks.forEach((edge) => {
-      if (!linkElementsRef.current.has(edge.id)) {
-        const visual = createLinkVisual();
-        linkElementsRef.current.set(edge.id, visual);
-        linksLayerRef.current?.appendChild(visual);
-      }
-    });
-
-    for (const [edgeId, visual] of linkElementsRef.current.entries()) {
-      if (!mergedLinks.some((edge) => edge.id === edgeId)) {
-        visual.remove();
-        linkElementsRef.current.delete(edgeId);
-      }
-    }
-
-    centerForceRef.current.x(width * 0.5).y(height * 0.5);
-    linkForceRef.current.links(mergedLinks);
-    collisionForceRef.current.radius((node) => {
-      const physics = node.semanticPhysics || {};
-      const activity = clamp((activityMap.get(node.id) || 0) / 3.2, 0, 1);
-      return Math.max(44, physics.collisionRadius || (node.layoutWidth || 220) * (0.18 + activity * 0.14));
-    });
-    simulation.nodes(mergedNodes);
-    simulation.alphaTarget(0.12).restart();
-
-    const renderScene = () => {
+    renderSceneRef.current = () => {
       const scene = sceneRef.current;
       const { nodes, links, selectedNodeId: currentSelectedNodeId, neighborIds: currentNeighborIds, activityMap: currentActivityMap, width: currentWidth, height: currentHeight } = scene;
       const nodeLookup = new Map(nodes.map((node) => [node.id, node]));
@@ -731,13 +739,14 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       }
     };
 
-    renderSceneRef.current = renderScene;
-    renderScene();
+    syncScene();
+    const unsubscribe = effectiveStore.subscribe(syncScene);
 
     return () => {
+      unsubscribe();
       renderSceneRef.current = null;
     };
-  }, [debugEdges, debugNodes, state.edges, state.nodes, state.selectedNode, state.viewport?.height, state.viewport?.width]);
+  }, [effectiveStore, debugEdges, debugNodes]);
 
   return createElement(
     "div",
@@ -748,7 +757,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       style: { position: "absolute", inset: 0, pointerEvents: "auto" },
       width: "100%",
       height: "100%",
-      viewBox: `0 0 ${Math.max(320, state.viewport?.width || 960)} ${Math.max(240, state.viewport?.height || 560)}`,
+      viewBox: `0 0 960 560`,
     }),
   );
 }

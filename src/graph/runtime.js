@@ -1,7 +1,8 @@
 import { createFoundationState } from "../../core/layout.js";
 import { extractFoundationTerms } from "../../modules/semanticExtractor.js";
 import { loadTheoryCorpus } from "../../modules/theoryLoader.js";
-import { evaluateTheoryResonance, evaluateNodeTheoryResonance, translateSemanticPhysics } from "../../core/theoryModel.js";
+import { evaluateTheoryResonance, evaluateNodeTheoryResonance } from "../../core/theoryOntology.js";
+import { translateSemanticPhysics } from "../../core/theoryModel.js";
 import { ensureTheoryCoreNode, mergeUniqueStrings, scheduleGraphStateSave } from "./graphState.js";
 import { buildFeedEntries, collectExpansionTopics, loadWikipediaPulse } from "./wikipediaIngestion.js";
 import { refreshCategories } from "./categoryEngine.js";
@@ -9,14 +10,16 @@ import { advanceForceSimulation } from "./forceSimulation.js";
 import { refreshSemanticTopology } from "./semanticResolver.js";
 
 const WIKI_TOPICS = [
-  "Participation (decision making)",
-  "Temporality",
-  "Spatial interaction",
-  "Public space",
-  "Architecture",
-  "Collective Action",
-  "Aesthetics",
+  "Joseph Beuys",
   "Social Sculpture",
+  "John Dewey",
+  "Georg W. Bertram",
+  "Process Art",
+  "Relational Aesthetics",
+  "Embodied Cognition",
+  "Participatory Art",
+  "Spatial Practice",
+  "Performance Art",
 ];
 
 const MAX_FEED_LINES = 24;
@@ -395,35 +398,30 @@ export function createGraphActions(store) {
   return {
     async bootstrap() {
       const state = store.getState();
-      const seedTopics = WIKI_TOPICS.slice(0, 3);
-      const initialEntries = [];
+      const [parsedTexts, theoryCorpus, wikiSeed] = await Promise.all([
+        loadJson("./data/parsedTexts.json", []),
+        loadTheoryCorpus(),
+        loadJson("./data/wikiRelations.json", []),
+      ]);
 
-      for (const topic of seedTopics) {
-        try {
-          const entry = await loadWikipediaPulse(topic);
-          if (entry) {
-            initialEntries.push(entry);
-          }
-        } catch {
-          continue;
-        }
-      }
+      const foundationCorpus = (Array.isArray(parsedTexts) && parsedTexts.length ? parsedTexts : theoryCorpus)
+        .map((entry) => ({
+          source: entry.source || entry.title || "parsedtext",
+          title: entry.title || entry.source || "parsedtext",
+          text: entry.text || entry.summary || entry.excerpt || "",
+          summary: entry.summary || entry.text || entry.excerpt || "",
+          excerpt: entry.excerpt || entry.text || entry.summary || "",
+          concepts: entry.concepts || entry.keywords || [],
+          categories: entry.categories || [],
+          links: entry.links || [],
+        }))
+        .filter((entry) => String(entry.text || entry.summary || "").trim().length > 0);
 
-      const stagedEntries = buildFeedEntries(initialEntries);
-      state.corpus = initialEntries.map((entry) => ({
-        source: entry.title,
-        title: entry.title,
-        text: entry.summary || entry.excerpt || "",
-        summary: entry.summary || entry.excerpt || "",
-        excerpt: entry.excerpt || entry.summary || "",
-        concepts: entry.concepts || [],
-        categories: entry.categories || [],
-        links: entry.links || [],
-      }));
-      state.feedQueue = [...stagedEntries];
-      state.ingestionQueue = [...stagedEntries];
-      state.wikiEntries = initialEntries.slice(0, MAX_WIKI_ENTRIES);
-      state.wikiSeed = [];
+      state.corpus = foundationCorpus;
+      state.feedQueue = buildFeedEntries(foundationCorpus);
+      state.ingestionQueue = [...state.feedQueue];
+      state.wikiSeed = Array.isArray(wikiSeed) ? wikiSeed : [];
+      state.wikiEntries = [];
       state.foundationState = createFoundationState(state.viewport);
       ensureTheoryCoreNode(state);
       ensureTheoryAttractors(state);
@@ -434,6 +432,7 @@ export function createGraphActions(store) {
       state.nextExtractionAt = performance.now() + 600;
       state.nextRelationAt = performance.now() + 900;
       state.nextWikiAt = performance.now() + 1800;
+      void this.ingestWikipediaPulse(WIKI_TOPICS[0]);
       scheduleGraphStateSave(state);
       store.update((draft) => {
         Object.assign(draft, state);
