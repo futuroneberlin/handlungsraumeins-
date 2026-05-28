@@ -335,19 +335,18 @@ function createNodeVisual(nodeId, handlers = {}) {
   // Render nodes as subtle yellow mesh elements in the background
   const group = createSvgElement("g", { "data-node-id": nodeId, style: "pointer-events:none" });
   const wake = createSvgElement("path", { fill: "none", pointerEvents: "none" });
-  const orbit = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#c9a227", "stroke-opacity": 0.08, pointerEvents: "none" });
-  const halo = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#c9a227", "stroke-opacity": 0.06, pointerEvents: "none" });
-  const body = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#c9a227", "stroke-opacity": 0.09, pointerEvents: "none" });
-  const core = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#c9a227", "stroke-opacity": 0.12, pointerEvents: "none" });
-  const label = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit", fill: "#c9a227", "fill-opacity": 0.08 });
-  const meta = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit", fill: "#c9a227", "fill-opacity": 0.06 });
-  const particles = [0, 1, 2, 3].map(() => createSvgElement("circle", { cx: 0, cy: 0, fill: "#c9a227", "fill-opacity": 0.06, pointerEvents: "none" }));
+  const orbit = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#111", "stroke-opacity": 0.03, pointerEvents: "none" });
+  const halo = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#111", "stroke-opacity": 0.02, pointerEvents: "none" });
+  const body = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#111", "stroke-opacity": 0.04, pointerEvents: "none" });
+  const core = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "#111", "fill-opacity": 0.06, pointerEvents: "none" });
+  const label = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit", fill: "#fff", "fill-opacity": 0.36 });
+  const meta = createSvgElement("text", { x: 0, y: 0, "text-anchor": "middle", "dominant-baseline": "middle", pointerEvents: "none", "font-family": "inherit", fill: "#ddd", "fill-opacity": 0.18 });
 
-  group.append(wake, orbit, halo, body, core, ...particles, label, meta);
+  group.append(wake, orbit, halo, body, core, label, meta);
 
   // Node interactions are disabled for the background mesh
 
-  return { group, wake, orbit, halo, body, core, label, meta, particles };
+  return { group, wake, orbit, halo, body, core, label, meta };
 }
 
 function createLinkVisual() {
@@ -642,32 +641,8 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     const marker = createSvgElement("marker", { id: "relation-arrow", markerWidth: 8, markerHeight: 8, refX: 7, refY: 3.5, orient: "auto", markerUnits: "strokeWidth" });
     marker.appendChild(createSvgElement("path", { d: "M0,0 L0,7 L7,3.5 z", fill: "#ffffff", "fill-opacity": 0.78 }));
 
-    const glow = createSvgElement("filter", { id: "relation-soft-glow", x: "-20%", y: "-20%", width: "140%", height: "140%" });
-    glow.appendChild(createSvgElement("feGaussianBlur", { stdDeviation: 1.1, result: "blur" }));
-    glow.appendChild(createSvgElement("feColorMatrix", { in: "blur", type: "matrix", values: "1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.85 0" }));
-
-    const nodeBodyGradient = createSvgElement("radialGradient", { id: "node-body-gradient", cx: "42%", cy: "35%", r: "72%" });
-    nodeBodyGradient.append(
-      createSvgElement("stop", { offset: "0%", "stop-color": "#fffaf2", "stop-opacity": 0.96 }),
-      createSvgElement("stop", { offset: "48%", "stop-color": "#f4e6ca", "stop-opacity": 0.92 }),
-      createSvgElement("stop", { offset: "100%", "stop-color": "#d6be8b", "stop-opacity": 0.72 }),
-    );
-
-    const nodeCoreGradient = createSvgElement("radialGradient", { id: "node-core-gradient", cx: "48%", cy: "42%", r: "68%" });
-    nodeCoreGradient.append(
-      createSvgElement("stop", { offset: "0%", "stop-color": "#ffffff", "stop-opacity": 1 }),
-      createSvgElement("stop", { offset: "72%", "stop-color": "#f8f0df", "stop-opacity": 0.92 }),
-      createSvgElement("stop", { offset: "100%", "stop-color": "#f0e0c2", "stop-opacity": 0.7 }),
-    );
-
-    const nodeHaloGradient = createSvgElement("radialGradient", { id: "node-halo-gradient", cx: "50%", cy: "48%", r: "78%" });
-    nodeHaloGradient.append(
-      createSvgElement("stop", { offset: "0%", "stop-color": "#ffffff", "stop-opacity": 0.24 }),
-      createSvgElement("stop", { offset: "55%", "stop-color": "#f6ead7", "stop-opacity": 0.12 }),
-      createSvgElement("stop", { offset: "100%", "stop-color": "#f6ead7", "stop-opacity": 0 }),
-    );
-
-    defs.append(marker, glow, nodeBodyGradient, nodeCoreGradient, nodeHaloGradient);
+    // Keep only the arrow marker in defs. Remove old glow/gradient defs to avoid blob/glow artifacts.
+    defs.append(marker);
 
     const linksLayer = createSvgElement("g", { class: "edge-layer-root" });
     const meshLayer = createSvgElement("g", { class: "mesh-layer-root" });
@@ -1095,12 +1070,12 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
             "data-stage": stage,
           });
 
+          // minimal subtle wake line (non-glowy)
           setSvgElementAttributes(visual.wake, {
             d: `M ${-body.width * 0.64} ${body.height * 0.05} C ${-body.width * 0.36} ${-body.height * (0.14 + body.activity * 0.08)}, ${-body.width * 0.1} ${body.height * (0.1 + body.activity * 0.06)}, ${body.width * 0.56} ${body.height * 0.08}`,
-            stroke: "#fff7ea",
-            strokeOpacity: clamp(0.08 + body.stability * 0.08 + (focusState.isSelected ? 0.1 : 0), 0.04, 0.3),
-            strokeWidth: clamp(0.8 + body.mass * 0.06, 0.6, 1.6),
-            style: `filter: blur(${clamp(depthState.blur * 1.1, 0.03, 0.9)}px);`,
+            stroke: "#111",
+            strokeOpacity: clamp(0.02 + body.stability * 0.04 + (focusState.isSelected ? 0.04 : 0), 0.01, 0.18),
+            strokeWidth: clamp(0.6 + body.mass * 0.04, 0.4, 1.2),
           });
 
           setSvgElementAttributes(visual.orbit, {
@@ -1110,49 +1085,41 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
             strokeOpacity: focusState.isSelected ? 0.34 : focusState.isNeighbor ? 0.2 : 0.08,
             strokeWidth: focusState.isSelected ? 1.8 : focusState.isNeighbor ? 1.3 : 0.8,
             strokeDasharray: resonance < 0.28 ? "4 8" : null,
-            style: `filter: blur(${clamp(depthState.blur * 0.6, 0.02, 0.4)}px);`,
+            // remove blur-based halo
+            style: "",
           });
 
           setSvgElementAttributes(visual.halo, {
             rx: body.haloWidth ? body.haloWidth * 0.5 : Math.max(52, (node.layoutWidth || 220) * 0.32),
             ry: body.haloHeight ? body.haloHeight * 0.5 : Math.max(26, (node.layoutWidth || 220) * 0.11),
-            fill: "url(#node-halo-gradient)",
-            fillOpacity: clamp(0.1 + body.activity * 0.12 + (focusState.isSelected ? 0.08 : 0), 0.04, 0.32),
-            stroke: "#f6f0e7",
-            strokeOpacity: focusState.isSelected ? 0.18 : 0.08,
-            strokeWidth: 1,
-            style: `filter: blur(${clamp(depthState.blur * 1.6, 0.03, 0.9)}px);`,
+            fill: "none",
+            fillOpacity: 0,
+            stroke: "#111",
+            strokeOpacity: focusState.isSelected ? 0.06 : 0.02,
+            strokeWidth: 0.6,
+            style: "",
           });
 
           setSvgElementAttributes(visual.body, {
             rx: body.width ? body.width * 0.5 : Math.max(34, (node.layoutWidth || 220) * 0.22),
             ry: body.height ? body.height * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.07),
-            fill: node.id === "theory-core-actional-space" ? "#f4d37a" : "url(#node-body-gradient)",
-            fillOpacity: clamp(0.14 + body.resonance * 0.68 + body.activity * 0.14 + (focusState.isSelected ? 0.18 : focusState.isNeighbor ? 0.08 : 0), 0.08, 1),
-            stroke: "#ffffff",
-            strokeOpacity: clamp(0.08 + body.density * 0.24, 0.04, 0.4),
-            strokeWidth: clamp(0.72 + body.mass * 0.14 + (focusState.isSelected ? 0.2 : 0), 0.7, 2.3),
+            fill: "none",
+            fillOpacity: 0,
+            stroke: "#111",
+            strokeOpacity: clamp(0.02 + body.density * 0.06, 0.01, 0.18),
+            strokeWidth: clamp(0.4 + body.mass * 0.06 + (focusState.isSelected ? 0.1 : 0), 0.3, 1.2),
           });
 
           setSvgElementAttributes(visual.core, {
             rx: body.coreWidth ? body.coreWidth * 0.5 : Math.max(18, (node.layoutWidth || 220) * 0.12),
             ry: body.coreHeight ? body.coreHeight * 0.5 : Math.max(8, (node.layoutWidth || 220) * 0.04),
-            fill: "url(#node-core-gradient)",
-            fillOpacity: clamp(0.14 + body.resonance * 0.42 + (focusState.isSelected ? 0.16 : 0), 0.08, 0.92),
-            style: `filter: blur(${clamp(depthState.blur * 0.42, 0.01, 0.26)}px);`,
+            fill: "#111",
+            fillOpacity: clamp(0.02 + body.resonance * 0.06 + (focusState.isSelected ? 0.04 : 0), 0.01, 0.18),
+            style: "",
           });
 
           const orbitSeed = tickTime * 0.00035 + Number(node.flowSeed || 0);
-          visual.particles.forEach((particle, particleIndex) => {
-            const angle = orbitSeed + particleIndex * 1.7;
-            setSvgElementAttributes(particle, {
-              cx: Math.cos(angle) * (body.width || 40) * (0.18 + particleIndex * 0.02 + (focusState.isSelected ? 0.04 : 0)),
-              cy: Math.sin(angle) * (body.height || 18) * (0.24 + particleIndex * 0.03 + (focusState.isSelected ? 0.06 : 0)),
-              r: 1.1 + body.activity * 1.1 + (focusState.isSelected ? 0.5 : 0),
-              fill: "#ffffff",
-              fillOpacity: clamp(0.14 + body.activity * 0.38 + (focusState.isSelected ? 0.2 : 0), 0.08, 0.92),
-            });
-          });
+          // particles removed for a clean sculptural mesh
 
           const labelFontSize = clamp(10 + body.resonance * 4 + body.activity * 2 + (focusState.isSelected ? 2 : 0), 10, 17);
           const metaFontSize = clamp(labelFontSize * 0.66, 8, 11);
@@ -1209,12 +1176,11 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
 
           setSvgElementAttributes(visual, {
             d: `M ${left.x} ${left.y} Q ${curveX} ${curveY} ${right.x} ${right.y}`,
-            stroke: edge.type === "wiki" || edge.type === "theory" ? "#c9a227" : "#ffffff",
-            strokeOpacity: Math.min(0.98, Math.max(0.04, (edge.opacity ?? 0.06) + Math.min(0.52, semanticStrength * 0.26) + Math.min(0.24, (edge.confidence || 0) * 0.2) + (selectedEdge ? 0.24 : 0) - (focusNodeId && !selectedEdge ? 0.16 : 0))),
-            strokeWidth: Math.max(0.46, 0.52 + semanticStrength * 0.68 + Math.min(0.52, (edge.confidence || 0) * 0.4) + (selectedEdge ? 0.42 : 0)),
+            stroke: "#bdbdbd",
+            strokeOpacity: Math.min(0.9, Math.max(0.02, (edge.opacity ?? 0.06) + Math.min(0.4, semanticStrength * 0.18) + Math.min(0.18, (edge.confidence || 0) * 0.12) + (selectedEdge ? 0.18 : 0) - (focusNodeId && !selectedEdge ? 0.12 : 0))),
+            strokeWidth: Math.max(0.28, 0.36 + semanticStrength * 0.4 + Math.min(0.32, (edge.confidence || 0) * 0.28) + (selectedEdge ? 0.32 : 0)),
             strokeDasharray: semanticStrength < 0.24 ? "5 11" : null,
             strokeDashoffset: `${Math.round(tickTime * -0.03)}`,
-            style: `filter: blur(${clamp(1.2 - semanticStrength * 0.32, 0.12, 1.38)}px); opacity:${breathing};`,
           });
         }
       };
