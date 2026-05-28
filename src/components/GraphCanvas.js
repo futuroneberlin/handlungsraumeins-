@@ -567,6 +567,9 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
   const collisionForceRef = useRef(null);
   const nodesLayerRef = useRef(null);
   const linksLayerRef = useRef(null);
+  const meshLayerRef = useRef(null);
+  const meshElementsRef = useRef(new Map());
+  const tensionElementsRef = useRef(new Map());
   const nodeElementsRef = useRef(new Map());
   const linkElementsRef = useRef(new Map());
   const sceneRef = useRef({
@@ -667,9 +670,11 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     defs.append(marker, glow, nodeBodyGradient, nodeCoreGradient, nodeHaloGradient);
 
     const linksLayer = createSvgElement("g", { class: "edge-layer-root" });
+    const meshLayer = createSvgElement("g", { class: "mesh-layer-root" });
     const nodesLayer = createSvgElement("g", { class: "node-layer-root" });
-    svg.append(defs, linksLayer, nodesLayer);
+    svg.append(defs, linksLayer, meshLayer, nodesLayer);
     linksLayerRef.current = linksLayer;
+    meshLayerRef.current = meshLayer;
     nodesLayerRef.current = nodesLayer;
 
     const centerForce = forceCenter(0, 0);
@@ -721,9 +726,12 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     linkForceRef.current = linkForce;
     collisionForceRef.current = collisionForce;
     linksLayerRef.current = linksLayer;
+    meshLayerRef.current = meshLayer;
     nodesLayerRef.current = nodesLayer;
     nodeElementsRef.current.clear();
     linkElementsRef.current.clear();
+    meshElementsRef.current.clear();
+    tensionElementsRef.current.clear();
     nodeElementsRef.current = new Map();
     linkElementsRef.current = new Map();
 
@@ -741,8 +749,11 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       collisionForceRef.current = null;
       nodesLayerRef.current = null;
       linksLayerRef.current = null;
+      meshLayerRef.current = null;
       nodeElementsRef.current.clear();
       linkElementsRef.current.clear();
+      meshElementsRef.current.clear();
+      tensionElementsRef.current.clear();
       if (svg) {
         svg.innerHTML = "";
       }
@@ -857,6 +868,138 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         activityMap,
         neighborIds,
       };
+
+      // --- Architectural mesh generation (nearest-neighbor lines + tension curves)
+      try {
+        const meshMap = new Map();
+        const maxNeighbors = 6;
+        const nodesArr = mergedNodes;
+        for (let i = 0; i < nodesArr.length; i++) {
+          const a = nodesArr[i];
+          const neighbors = nodesArr
+            .filter((n) => n.id !== a.id)
+            .map((n) => ({ n, d: Math.hypot((n.x || 0) - (a.x || 0), (n.y || 0) - (a.y || 0)) }))
+            .sort((l, r) => l.d - r.d)
+            .slice(0, maxNeighbors);
+
+          for (const nb of neighbors) {
+            const id1 = String(a.id);
+            const id2 = String(nb.n.id);
+            const key = id1 < id2 ? `${id1}::${id2}` : `${id2}::${id1}`;
+            if (!meshMap.has(key)) {
+              meshMap.set(key, { a, b: nb.n, dist: nb.d });
+            }
+          }
+        }
+
+        // Create new mesh lines
+        for (const [key, seg] of meshMap.entries()) {
+          if (!meshElementsRef.current.has(key)) {
+            const line = createSvgElement("line", {
+              "data-mesh": key,
+              stroke: "#222",
+              "stroke-opacity": 0.04,
+              "stroke-width": 0.6,
+              "vector-effect": "non-scaling-stroke",
+              "pointer-events": "none",
+            });
+            meshElementsRef.current.set(key, line);
+            meshLayerRef.current?.appendChild(line);
+          }
+        }
+
+        // Remove stale mesh lines
+        for (const oldKey of Array.from(meshElementsRef.current.keys())) {
+          if (!meshMap.has(oldKey)) {
+            const el = meshElementsRef.current.get(oldKey);
+            el.remove();
+            meshElementsRef.current.delete(oldKey);
+          }
+        }
+
+        // Update positions with gentle breathing and depth
+        for (const [key, el] of meshElementsRef.current.entries()) {
+          const [idA, idB] = key.split("::");
+          const a = mergedNodes.find((n) => String(n.id) === idA);
+          const b = mergedNodes.find((n) => String(n.id) === idB);
+          if (!a || !b) continue;
+          const breath = Math.sin((sceneRef.current.tickTime || performance.now()) * 0.00035 + (hashString(key) % 100) * 0.01) * 2.4;
+          const ax = (a.x || 0) + breath * (0.28 + (Number(a.resonance || 0) * 0.6));
+          const bx = (b.x || 0) - breath * (0.28 + (Number(b.resonance || 0) * 0.6));
+          el.setAttribute("x1", String(ax));
+          el.setAttribute("y1", String(a.y || 0));
+          el.setAttribute("x2", String(bx));
+          el.setAttribute("y2", String(b.y || 0));
+          const avgRes = (Number(a.resonance || 0) + Number(b.resonance || 0)) / 2;
+          const dist = Math.hypot((a.x || 0) - (b.x || 0), (a.y || 0) - (b.y || 0));
+          const opacity = clamp(0.02 + avgRes * 0.05 + (1 - clamp(dist / 420, 0, 1)) * 0.03, 0.01, 0.12);
+          el.setAttribute("stroke-opacity", String(opacity.toFixed(3)));
+          el.setAttribute("stroke-width", String((0.28 + avgRes * 0.6).toFixed(2)));
+        }
+      } catch (err) {
+        console.warn("Mesh generation error:", err);
+      }
+
+      // Create curved tension lines for strong semantic relations
+      try {
+        const tensionThreshold = 0.48;
+        const strongEdges = mergedLinks.filter((e) => (Number(e.semanticStrength || e.score || 0) >= tensionThreshold) || (Number(e.confidence || 0) >= 0.45));
+
+        for (const edge of strongEdges) {
+          const key = `tension::${edge.id}`;
+          if (!tensionElementsRef.current.has(key)) {
+            const path = createSvgElement("path", {
+              fill: "none",
+              stroke: "#111",
+              "stroke-opacity": 0.06,
+              "stroke-width": 0.8,
+              "pointer-events": "none",
+              "vector-effect": "non-scaling-stroke",
+            });
+            tensionElementsRef.current.set(key, path);
+            meshLayerRef.current?.appendChild(path);
+          }
+        }
+
+        for (const oldKey of Array.from(tensionElementsRef.current.keys())) {
+          const edgeId = oldKey.replace(/^tension::/, "");
+          if (!mergedLinks.some((e) => String(e.id) === edgeId && ((Number(e.semanticStrength || e.score || 0) >= tensionThreshold) || (Number(e.confidence || 0) >= 0.45)))) {
+            const el = tensionElementsRef.current.get(oldKey);
+            el.remove();
+            tensionElementsRef.current.delete(oldKey);
+          }
+        }
+
+        for (const [key, pathEl] of tensionElementsRef.current.entries()) {
+          const edgeId = key.replace(/^tension::/, "");
+          const edge = mergedLinks.find((e) => String(e.id) === edgeId);
+          if (!edge) continue;
+          const s = edge.sourceNode || edge.source || {};
+          const t = edge.targetNode || edge.target || {};
+          const sx = s.x || 0;
+          const sy = s.y || 0;
+          const tx = t.x || 0;
+          const ty = t.y || 0;
+          const mx = (sx + tx) / 2;
+          const my = (sy + ty) / 2;
+          const dx = tx - sx;
+          const dy = ty - sy;
+          const dist = Math.hypot(dx, dy) || 1;
+          const normalX = -dy / dist;
+          const normalY = dx / dist;
+          const strength = clamp(Number(edge.semanticStrength || edge.score || edge.confidence || 0), 0, 1);
+          const offset = 8 + strength * 28;
+          const cx = mx + normalX * offset * (0.6 + Math.sin((sceneRef.current.tickTime || performance.now()) * 0.0006 + (hashString(edge.id || edge.source || edge.target) % 100) * 0.01) * 0.28);
+          const cy = my + normalY * offset * (0.6 + Math.cos((sceneRef.current.tickTime || performance.now()) * 0.0005 + (hashString(edge.id || edge.source || edge.target) % 100) * 0.01) * 0.28);
+          const d = `M ${sx},${sy} Q ${cx},${cy} ${tx},${ty}`;
+          pathEl.setAttribute("d", d);
+          const opacity = clamp(0.02 + strength * 0.08, 0.02, 0.18);
+          pathEl.setAttribute("stroke-opacity", String(opacity.toFixed(3)));
+          pathEl.setAttribute("stroke-width", String((0.6 + strength * 1.2).toFixed(2)));
+        }
+      } catch (err) {
+        console.warn("Tension update error:", err);
+      }
 
       mergedNodes.forEach((node) => {
         if (!nodeElementsRef.current.has(node.id)) {
