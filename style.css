@@ -417,10 +417,18 @@ h1 {
 }
 
 @media (max-width: 860px) {
+  body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
+    gap: 0.75rem;
     min-height: 100dvh;
-    height: 100dvh;
+    height: auto;
+    padding: 0.75rem;
+    overflow: visible;
   }
 
   .zone,
@@ -428,7 +436,43 @@ h1 {
     min-height: 0;
   }
 
+  .stage-shell {
+    height: min(62dvh, 34rem);
+  }
+
+  .zone {
+    padding: 0.85rem;
+    border-radius: 20px;
+  }
+
+  .zone-panel {
+    gap: 0.6rem;
+    overflow: visible;
+    padding-right: 0;
+  }
+
   .controls {
     justify-content: flex-start;
+    gap: 0.6rem;
+    padding: 0.75rem;
+  }
+
+  .controls label {
+    flex: 1 1 9rem;
+  }
+
+  .controls select,
+  .controls input,
+  .controls button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .controls button {
+    padding-inline: 0.9rem;
+  }
+
+  h1 {
+    font-size: clamp(1rem, 5vw, 1.45rem);
   }
 }
