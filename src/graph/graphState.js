@@ -29,6 +29,7 @@ export function createInitialGraphState() {
     debug: false,
     hydrated: false,
     running: true,
+    pausedAt: 0,
     lastSavedAt: 0,
     lastFrameAt: 0,
     nextFeedAt: 0,
@@ -37,7 +38,7 @@ export function createInitialGraphState() {
     nextWikiAt: 0,
     nextTransformationAt: 0,
     wikiCursor: 0,
-    feedSpeed: 8,
+    feedSpeed: 3.2,
   };
 }
 

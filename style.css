@@ -447,8 +447,12 @@ h1 {
 
   .zone-panel {
     gap: 0.6rem;
-    overflow: visible;
+    max-height: min(36dvh, 26rem);
+    overflow: auto;
     padding-right: 0;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
   }
 
   .controls {

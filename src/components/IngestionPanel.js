@@ -18,17 +18,9 @@ export function IngestionPanel({ queue = [], feedLines = [], selectedNodeId, onN
       .slice(0, 4)
       .map((item) => ({
         title: item.title || "Wikipedia article",
-        text: clampSentences(item.excerpt || item.text || item.rawText || "", 3),
-        meta: [item.sourceMeta || item.source || "Wikipedia live API", item.stage ? `stage ${item.stage}` : null].filter(Boolean).join(" · ") || "Wikipedia live API",
+        text: clampSentences(item.excerpt || item.text || "", 2),
+        concepts: (item.concepts || item.keywords || []).slice(0, 5),
         nodeId: item.nodeId || item.id || null,
-      })),
-    ...feedLines
-      .filter((line) => Number(line.theoryRelevance || 0) >= 1.12)
-      .slice(-3)
-      .map((line) => ({
-        title: line.title || line.concept || "Wikipedia stream",
-        text: clampSentences(line.excerpt || line.text || "", 3),
-        meta: [line.sourceMeta || line.source || "Wikipedia live API", line.stage ? `stage ${line.stage}` : "active"].filter(Boolean).join(" · "),
       })),
   ].filter((item) => item.text);
 
@@ -44,24 +36,18 @@ export function IngestionPanel({ queue = [], feedLines = [], selectedNodeId, onN
     createElement(
       "div",
       { className: "zone-panel", "aria-live": "polite" },
-      createElement(
-        "div",
-        { className: "zone-meta" },
-        createElement("span", null, `queue ${queue.length}`),
-        createElement("span", null, `selected ${selectedNodeId || "none"}`),
-      ),
       ...(activeItems.length ? activeItems.map((item, index) => createElement(SemanticNodeCard, {
-        key: `${item.title}-${index}`,
+        key: `${item.nodeId || item.title}-${index}`,
         title: item.title,
         text: item.text,
-        meta: item.meta,
+        meta: item.concepts?.length ? item.concepts.join(" · ") : undefined,
         nodeId: item.nodeId,
         onClick: onNodeSelect,
       })) : [createElement(SemanticNodeCard, {
         key: "curation-waiting",
         title: "Wikipedia live queue",
-        text: "Echte Wikipedia-Artikel erscheinen nur, wenn sie thematisch passen und eine lesbare theoretische Resonanz erzeugen.",
-        meta: "staged live ingestion aktiv",
+        text: "Kuratiertes Material erscheint langsam, wenn ein Artikel genügend theoretische Resonanz erzeugt.",
+        meta: "actional space curation",
       })]),
     ),
   );

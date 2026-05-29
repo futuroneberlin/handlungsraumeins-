@@ -60,12 +60,12 @@ function createSourceMeta(entry) {
 }
 
 function stageDelay(index) {
-  return 280 + index * 760;
+  return 4500 + index * 5200;
 }
 
 function createStagedIngestionItem(entry, index = 0) {
   const summary = normalizeText(entry.summary || entry.excerpt || "");
-  const excerpt = extractConceptualSentences(summary, 2, 38);
+  const excerpt = extractConceptualSentences(summary, 1, 26);
   if (!excerpt) {
     return null;
   }
@@ -87,7 +87,7 @@ function createStagedIngestionItem(entry, index = 0) {
     ...(entry.concepts || []),
   ], { minScore: 1.08 }).slice(0, 4);
 
-  const concepts = curated.length ? [...new Set(curated.map((item) => item.signal))] : (entry.concepts || []).slice(0, 4);
+  const concepts = curated.length ? [...new Set(curated.map((item) => item.signal))] : (entry.concepts || []).slice(0, 5);
   const physics = entry.semanticPhysics || {};
 
   return {
@@ -97,13 +97,9 @@ function createStagedIngestionItem(entry, index = 0) {
     title: entry.title || "Wikipedia article",
     text: excerpt,
     excerpt,
-    rawText: summary,
     sourceMeta: createSourceMeta(entry),
     sourceUrl: entry.url || "",
     pageid: entry.pageid || null,
-    category: entry.title || "Wikipedia article",
-    categories: entry.categories || [],
-    links: entry.links || [],
     keywords: concepts.slice(0, 4),
     concept: concepts[0] || entry.title || "Wikipedia article",
     concepts,

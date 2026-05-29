@@ -333,7 +333,7 @@ function setSvgElementAttributes(element, attributes = {}) {
 
 function createNodeVisual(nodeId, handlers = {}) {
   // Render nodes as subtle yellow mesh elements in the background
-  const group = createSvgElement("g", { "data-node-id": nodeId, style: "pointer-events:none" });
+  const group = createSvgElement("g", { "data-node-id": nodeId, style: "pointer-events:auto; cursor:pointer" });
   const wake = createSvgElement("path", { fill: "none", pointerEvents: "none" });
   const orbit = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#111", "stroke-opacity": 0.03, pointerEvents: "none" });
   const halo = createSvgElement("ellipse", { cx: 0, cy: 0, fill: "none", stroke: "#111", "stroke-opacity": 0.02, pointerEvents: "none" });
@@ -344,7 +344,18 @@ function createNodeVisual(nodeId, handlers = {}) {
 
   group.append(wake, orbit, halo, body, core, label, meta);
 
-  // Node interactions are disabled for the background mesh
+  const handleActivate = () => {
+    handlers.onActivate?.(nodeId);
+  };
+
+  const handleSelect = () => {
+    handlers.onSelect?.(nodeId);
+  };
+
+  group.addEventListener("pointerup", handleSelect);
+  group.addEventListener("touchstart", handleActivate, { passive: true });
+
+  // Node interactions are routed through the visible sculptural mesh.
 
   return { group, wake, orbit, halo, body, core, label, meta };
 }
@@ -606,6 +617,27 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     resize();
     window.addEventListener("resize", resize, { passive: true });
 
+    const handleVisibilityChange = () => {
+      const visible = document.visibilityState === "visible";
+      actions.setSimulationRunning(visible);
+      const simulation = simulationRef.current;
+      if (!simulation) {
+        return;
+      }
+
+      if (!visible) {
+        simulation.stop();
+        return;
+      }
+
+      const currentState = effectiveStore.getState();
+      simulation.alphaTarget(currentState.selectedNode ? 0.12 : 0.04).restart();
+      renderSceneRef.current?.();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    handleVisibilityChange();
+
     const tick = (now) => {
       if (!active) {
         return;
@@ -626,6 +658,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       active = false;
       window.cancelAnimationFrame(frameId);
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [actions, store]);
 
@@ -669,7 +702,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     const collisionForce = forceCollide()
       .radius((node) => {
         const body = projectNodeBody(node);
-        return Math.max(36, body.width * 0.24 + body.mass * 0.8);
+        return Math.max(48, body.width * 0.34 + body.mass * 1.05);
       })
       .iterations(2);
 
@@ -680,7 +713,7 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
         const resonance = clamp(Number(node.resonance || node.theoryResonanceScore || 0), 0, 1);
         const mass = clamp(Number(node.mass || 1), 0.72, 7.8);
         const stability = clamp(Number(node.stability || 0.5), 0, 1);
-        return -(42 + mass * 20 + resonance * 22 + stability * 10);
+        return -(28 + mass * 14 + resonance * 16 + stability * 8);
       }))
       .force("collision", collisionForce)
       .force("flow", createFlowForce(sceneRef))
@@ -688,8 +721,8 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
       .force("condensation", createCondensationForce(sceneRef))
       .force("drift", createDriftForce(sceneRef))
       .force("gravity", createTheoryGravityForce(sceneRef))
-      .velocityDecay(0.58)
-      .alphaDecay(0.015)
+      .velocityDecay(0.7)
+      .alphaDecay(0.02)
       .alphaMin(0.001);
 
     simulation.on("tick", () => {
@@ -697,6 +730,9 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
     });
 
     simulationRef.current = simulation;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      simulation.stop();
+    }
     centerForceRef.current = centerForce;
     linkForceRef.current = linkForce;
     collisionForceRef.current = collisionForce;
@@ -1199,11 +1235,11 @@ export function GraphCanvas({ store, onNodeSelect, debugNodes = null, debugEdges
 
   return createElement(
     "div",
-    { className: `graph-center ${className}`.trim(), ref: containerRef, style: { position: "relative", width: "100%", height: "100%", ...style }, ...rest },
+    { className: `graph-center ${className}`.trim(), ref: containerRef, style: { position: "relative", width: "100%", height: "100%", pointerEvents: "auto", touchAction: "manipulation", ...style }, ...rest },
     createElement("svg", {
       ref: svgRef,
       className: "edge-layer",
-      style: { position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 },
+      style: { position: "absolute", inset: 0, pointerEvents: "auto", touchAction: "manipulation", zIndex: 0 },
       width: "100%",
       height: "100%",
       viewBox: `0 0 960 560`,
