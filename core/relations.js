@@ -5,43 +5,6 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function normalizeTokenList(values = []) {
-  return [...new Set(values
-    .flat()
-    .map((value) => String(value || "").toLowerCase().trim())
-    .map((value) => value.replace(/^category:/i, ""))
-    .filter(Boolean))];
-}
-
-function tokenize(value = "") {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter((part) => part && part.length > 2 && !["the", "and", "for", "with", "from", "that", "this", "into", "over", "about"].includes(part));
-}
-
-function collectSignals(node) {
-  return normalizeTokenList([
-    node?.keywords || [],
-    node?.keyword,
-    node?.text,
-    node?.title,
-    node?.wikiSummary,
-    node?.wikiCategories || node?.categories || [],
-    node?.wikiLinks || [],
-    node?.category,
-    node?.semanticGroup,
-    node?.role,
-  ]);
-}
-
-function overlap(leftValues = [], rightValues = []) {
-  const rightSet = new Set(normalizeTokenList(rightValues));
-  return normalizeTokenList(leftValues).filter((value) => rightSet.has(value));
-}
-
 function relationScore(left, right) {
   const leftResonance = evaluateNodeTheoryResonance(left, { minScore: 1.1 });
   const rightResonance = evaluateNodeTheoryResonance(right, { minScore: 1.1 });
@@ -56,10 +19,10 @@ function relationScore(left, right) {
   };
   const resonanceScore = Number(sharedDimensionSet.reduce((total, dimension) => total + (dimensionWeights[dimension] || 0.5), 0).toFixed(3));
   const support = Number(Math.min(1.6, ((leftResonance.score || 0) + (rightResonance.score || 0)) * 0.18).toFixed(3));
-  const totalScore = Number(Math.min(4, resonanceScore + support + (sharedDimensionSet.length >= 3 ? 0.32 : sharedDimensionSet.length >= 2 ? 0.16 : 0)).toFixed(3));
+  const totalScore = Number(Math.min(4, resonanceScore + support + (sharedDimensionSet.length >= 3 ? 0.28 : sharedDimensionSet.length >= 2 ? 0.14 : 0)).toFixed(3));
   const dominantDimension = sharedDimensionSet[0] || leftResonance.dominantDimension || rightResonance.dominantDimension || null;
 
-  if (!sharedDimensionSet.length || totalScore < 1.05) {
+  if (!sharedDimensionSet.length || totalScore < 1.15) {
     return {
       reject: true,
       resonanceScore: 0,
@@ -155,51 +118,29 @@ const GROUP_CONCEPTS = new Map([
   ["Theory", "Theory Core Resonance"],
 ]);
 
-function collectSemanticSignals(node) {
-  return normalizeTokenList([
-    node?.concepts || [],
-    node?.keywords || [],
-    node?.wikiCategories || node?.categories || [],
-    node?.wikiLinks || [],
-    node?.semanticGroup,
-    node?.category,
-    node?.role,
-    node?.title,
-    node?.text,
-    node?.keyword,
+function buildConceptVector(node) {
+  const signals = [...new Set([
+    ...(Array.isArray(node?.concepts) ? node.concepts : []),
+    ...(Array.isArray(node?.theoryDimensions) ? node.theoryDimensions : []),
+    ...(Array.isArray(node?.activatedDimensions) ? node.activatedDimensions : []),
     node?.semanticLabel,
     node?.semanticExcerpt,
+    node?.title,
+    node?.text,
     node?.wikiSummary,
-  ]);
-}
-
-function conceptMatches(signal) {
-  const normalized = String(signal || "").toLowerCase();
-  const matches = [];
-
-  for (const trait of CONCEPT_TRAITS) {
-    const matchedTerms = trait.terms.filter((term) => normalized.includes(term));
-    if (!matchedTerms.length) {
-      continue;
-    }
-
-    matches.push({
-      label: trait.label,
-      group: trait.group,
-      strength: trait.weight + Math.min(0.4, matchedTerms.length * 0.08),
-    });
-  }
-
-  return matches;
-}
-
-function buildConceptVector(node) {
-  const signals = collectSemanticSignals(node);
+    node?.abstract,
+  ].map((value) => String(value || "").toLowerCase().trim()).filter(Boolean))];
   const weights = new Map();
 
   for (const signal of signals) {
-    for (const match of conceptMatches(signal)) {
-      weights.set(match.label, (weights.get(match.label) || 0) + match.strength);
+    const normalized = String(signal || "");
+    for (const trait of CONCEPT_TRAITS) {
+      const matchedTerms = trait.terms.filter((term) => normalized.includes(term));
+      if (!matchedTerms.length) {
+        continue;
+      }
+
+      weights.set(trait.label, (weights.get(trait.label) || 0) + trait.weight + Math.min(0.4, matchedTerms.length * 0.08));
     }
   }
 
@@ -314,51 +255,37 @@ function selectPrimaryLabel(vector, fallbackValue) {
   return normalizeConceptLabel(vector?.primaryConcept || fallbackValue || "Conceptual Field");
 }
 
-function composeRelationNarrative({ left, right, leftVector, rightVector, sharedConcepts = [], sharedTheorySignals = [], sharedCategories = [], sharedLinks = [], sharedKeywords = [], theoryBoost = 0, proximityScore = 0 }) {
+function composeRelationNarrative({ left, right, leftVector, rightVector, sharedConcepts = [], sharedTheorySignals = [], theoryBoost = 0 }) {
   const leftLabel = selectPrimaryLabel(leftVector, left?.semanticLabel || left?.title || left?.keyword || left?.text);
   const rightLabel = selectPrimaryLabel(rightVector, right?.semanticLabel || right?.title || right?.keyword || right?.text);
-  const bridge = sharedConcepts[0] || sharedTheorySignals[0] || sharedCategories[0] || sharedLinks[0] || sharedKeywords[0] || null;
-  const bridgeLabel = normalizeConceptLabel(bridge || "conceptual proximity");
+  const bridge = sharedConcepts[0] || sharedTheorySignals[0] || null;
+  const bridgeLabel = normalizeConceptLabel(bridge || "theory resonance");
 
-  if (sharedConcepts.some((concept) => /Embodied Collective Action|Participation|Interaction|Body|Movement/i.test(concept)) || sharedTheorySignals.some((signal) => /participation|interaction|body|movement/i.test(signal))) {
+  if (sharedTheorySignals.some((signal) => /participation|interaction|body|movement/i.test(signal)) || sharedConcepts.some((concept) => /Embodied Collective Action|Participation|Interaction|Body|Movement/i.test(concept))) {
     return {
       label: "Embodied Collective Action",
       explanation: `Participation and collective action converge through embodied interaction between ${leftLabel} and ${rightLabel}.`,
     };
   }
 
-  if (sharedConcepts.some((concept) => /Temporal Sculptural Transformation|Temporal|Process|Transformation|Movement/i.test(concept)) || sharedTheorySignals.some((signal) => /temporality|process|transformation/i.test(signal))) {
+  if (sharedTheorySignals.some((signal) => /temporality|process|transformation/i.test(signal)) || sharedConcepts.some((concept) => /Temporal Sculptural Transformation|Temporal|Process|Transformation|Movement/i.test(concept))) {
     return {
       label: "Temporal Sculptural Transformation",
       explanation: `Temporal process connects ${leftLabel.toLowerCase()} with ${rightLabel.toLowerCase()} through transformation and sequence.`,
     };
   }
 
-  if (sharedConcepts.some((concept) => /Spatial Configuration|Space|Architecture|Structure|Environment/i.test(concept)) || sharedTheorySignals.some((signal) => /space|spatial|architecture|structure/i.test(signal))) {
+  if (sharedTheorySignals.some((signal) => /space|spatial|architecture|structure/i.test(signal)) || sharedConcepts.some((concept) => /Spatial Configuration|Space|Architecture|Structure|Environment/i.test(concept))) {
     return {
       label: "Spatial Activation",
       explanation: `Spatial activation links ${leftLabel.toLowerCase()} with ${rightLabel.toLowerCase()} through structure, environment, and placement.`,
     };
   }
 
-  if (sharedConcepts.some((concept) => /Social Sculpture|Relational Public Space|Collective|Community|Public/i.test(concept)) || sharedTheorySignals.some((signal) => /social sculpture|collective|community|public/i.test(signal))) {
+  if (sharedTheorySignals.some((signal) => /social sculpture|collective|community|public/i.test(signal)) || sharedConcepts.some((concept) => /Social Sculpture|Relational Public Space|Collective|Community|Public/i.test(concept))) {
     return {
       label: "Social Sculpture",
       explanation: `Social sculpture links ${leftLabel.toLowerCase()} and ${rightLabel.toLowerCase()} through collective form and public relation.`,
-    };
-  }
-
-  if (sharedCategories.length > 0) {
-    return {
-      label: normalizeConceptLabel(sharedCategories[0]),
-      explanation: `Shared conceptual ground in ${normalizeConceptLabel(sharedCategories[0])} shapes the relation between ${leftLabel} and ${rightLabel}.`,
-    };
-  }
-
-  if (sharedLinks.length > 0) {
-    return {
-      label: `Linked via ${normalizeConceptLabel(sharedLinks[0])}`,
-      explanation: `Internal reference ${normalizeConceptLabel(sharedLinks[0])} joins ${leftLabel} and ${rightLabel}.`,
     };
   }
 
@@ -369,7 +296,7 @@ function composeRelationNarrative({ left, right, leftVector, rightVector, shared
     };
   }
 
-  if (theoryBoost > 0.5 || proximityScore > 0.8) {
+  if (theoryBoost > 0.5) {
     return {
       label: `${leftLabel} / ${rightLabel}`,
       explanation: `Theory resonance keeps ${leftLabel} and ${rightLabel} in a dense field of conceptual overlap.`,
@@ -433,7 +360,7 @@ export function createSemanticEdges(nodes, wikiEntries = [], timestamp = now()) 
   return uniqueBy(edges, (edge) => edge.id)
     .filter((relation) => relation.leftIndex >= 0 && relation.rightIndex >= 0)
     .sort((left, right) => right.score - left.score)
-    .slice(0, Math.max(14, Math.ceil(safeNodes.length * 1.05)));
+    .slice(0, Math.max(10, Math.ceil(safeNodes.length * 0.8)));
 }
 
 export function createEmergentCategories(nodes, edges = [], timestamp = now()) {
@@ -522,7 +449,7 @@ export function createEmergentCategories(nodes, edges = [], timestamp = now()) {
     })
     .filter((category) => category.stable || (category.nodeCount >= 3 && category.density >= 0.7))
     .sort((left, right) => right.nodeCount - left.nodeCount || right.density - left.density)
-    .slice(0, 6);
+    .slice(0, 5);
 }
 
 export function buildRelations(fragments, wikiEntries = [], timestamp = now()) {

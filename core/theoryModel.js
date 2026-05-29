@@ -341,16 +341,15 @@ export function synthesizeConceptualStatement(concepts = [], fallback = THEORY_C
 
 function collectNodeSignals(node) {
   return [
-    ...(Array.isArray(node?.keywords) ? node.keywords : []),
-    ...(Array.isArray(node?.wikiCategories) ? node.wikiCategories : []),
-    ...(Array.isArray(node?.wikiLinks) ? node.wikiLinks : []),
+    ...(Array.isArray(node?.concepts) ? node.concepts : []),
+    node?.semanticLabel,
     node?.text,
-    node?.keyword,
     node?.title,
-    node?.category,
-    node?.semanticGroup,
-    node?.role,
+    node?.semanticExcerpt,
     node?.wikiSummary,
+    node?.abstract,
+    ...(Array.isArray(node?.theoryDimensions) ? node.theoryDimensions : []),
+    ...(Array.isArray(node?.activatedDimensions) ? node.activatedDimensions : []),
   ]
     .filter(Boolean)
     .map(normalize)
@@ -462,63 +461,38 @@ function hasAnySignal(signals, terms) {
 export function explainTheoryConnection({ sharedKeywords = [], sharedCategories = [], sharedLinks = [], sharedConcepts = [], theoryBoost = 0, repetitionScore = 0, left, right, leftTheorySignals = [], rightTheorySignals = [] }) {
   const leftLabel = String(left?.semanticLabel || left?.title || left?.keyword || left?.text || "Concept");
   const rightLabel = String(right?.semanticLabel || right?.title || right?.keyword || right?.text || "Concept");
-  const signals = normalize([
-    ...sharedKeywords,
-    ...sharedCategories,
-    ...sharedLinks,
-    ...sharedConcepts,
-    left?.keyword,
-    left?.text,
-    left?.category,
-    left?.semanticGroup,
-    right?.keyword,
-    right?.text,
-    right?.category,
-    right?.semanticGroup,
-  ]).split(" ");
   const theorySignals = [...new Set([
     ...leftTheorySignals,
     ...rightTheorySignals,
-  ])];
+    ...sharedConcepts,
+  ].map(normalize).filter(Boolean))];
 
   if (theoryBoost > 0.8) {
-    if (theorySignals.includes("participation") || theorySignals.includes("interaction")) {
+    if (theorySignals.some((signal) => signal.includes("participation") || signal.includes("interaction"))) {
       return `Participation and interaction bind ${leftLabel} with ${rightLabel} through the theory core.`;
     }
 
-    if (theorySignals.includes("transformation") || theorySignals.includes("social sculpture")) {
+    if (theorySignals.some((signal) => signal.includes("transformation") || signal.includes("social sculpture"))) {
       return `The theory core frames ${leftLabel} and ${rightLabel} as a sculptural transformation field.`;
     }
 
-    if (theorySignals.includes("collective action") || theorySignals.includes("community")) {
+    if (theorySignals.some((signal) => signal.includes("collective action") || signal.includes("community"))) {
       return `Collective action links ${leftLabel} and ${rightLabel} within the theory core.`;
     }
 
     return `Theory resonance keeps ${leftLabel} and ${rightLabel} in a shared field of action and transformation.`;
   }
 
-  if (hasAnySignal(signals, ["participation", "interaction", "participatory"])) {
+  if (theorySignals.some((signal) => signal.includes("participation") || signal.includes("interaction") || signal.includes("participatory"))) {
     return `Participation and interaction connect ${leftLabel} with ${rightLabel}.`;
   }
 
-  if (hasAnySignal(signals, ["transformation", "body", "sculpture", "practice", "process"])) {
+  if (theorySignals.some((signal) => signal.includes("transformation") || signal.includes("body") || signal.includes("sculpture") || signal.includes("practice") || signal.includes("process"))) {
     return `Sculptural transformation links ${leftLabel} with ${rightLabel}.`;
   }
 
-  if (hasAnySignal(signals, ["space", "public", "society", "community", "collective action"])) {
+  if (theorySignals.some((signal) => signal.includes("space") || signal.includes("public") || signal.includes("society") || signal.includes("community") || signal.includes("collective action"))) {
     return `Public space and collective relation connect ${leftLabel} with ${rightLabel}.`;
-  }
-
-  if (sharedCategories.length > 0) {
-    return `Linked through shared Wikipedia category ${sharedCategories[0]}`;
-  }
-
-  if (sharedLinks.length > 0) {
-    return `Linked by the internal Wikipedia reference ${sharedLinks[0]}`;
-  }
-
-  if (sharedKeywords.length > 0) {
-    return `Connected through ${sharedKeywords.slice(0, 2).join(" and ")} between ${leftLabel} and ${rightLabel}.`;
   }
 
   if (repetitionScore > 0.2) {

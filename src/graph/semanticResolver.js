@@ -62,11 +62,11 @@ export function describeEdge(edge) {
 function collectConceptSignals(node) {
   return Array.from(new Set([
     ...(node?.concepts || []),
-    ...(node?.keywords || []),
-    ...(node?.wikiCategories || []),
-    node?.semanticGroup,
-    node?.category,
-    node?.role,
+    ...(node?.theoryDimensions || []),
+    ...(node?.activatedDimensions || []),
+    node?.semanticLabel,
+    node?.semanticExcerpt,
+    node?.wikiSummary,
   ].filter(Boolean)));
 }
 
@@ -84,7 +84,7 @@ export function getNodeSummary(node, state) {
   const conceptSignals = collectConceptSignals(node);
   const dimensions = ontology.activatedDimensions || [];
   const theorySentence = dimensions.length
-    ? `Why it fits the theory: ${dimensions.slice(0, 4).join(" · ")} are active in the article's language and relation pattern.`
+    ? `Why it fits the theory: ${dimensions.slice(0, 4).join(" · ")} are active in the fragment's spatial transformation.`
     : "Why it fits the theory: participation, temporality, embodiment, and spatial transformation are still structurally present in the fragment.";
   const sculpturalSentence = node?.semanticPhysics
     ? `Spatial condition: the fragment condenses into a body with mass ${node.semanticPhysics.semanticMass || 1}, orbit ${node.semanticPhysics.orbitRadius || 0}, and persistence ${node.semanticPhysics.persistence || 0}.`
@@ -99,9 +99,7 @@ export function getNodeSummary(node, state) {
   const feedLine = [...(state?.feedLines || [])].reverse().find((line) => String(line.text || line.source).toLowerCase().includes(String(node.keyword || node.text || "").toLowerCase()));
   const sourceSignals = [
     matchedWiki?.title,
-    ...(matchedWiki?.categories || []),
     ...(matchedWiki?.concepts || []),
-    ...(matchedWiki?.links || []),
     node.abstract,
     node.semanticExcerpt,
     node.wikiSummary,
@@ -135,15 +133,16 @@ export function getSelectedNodeDetails(state) {
     title: selectedNode.title || selectedNode.semanticLabel || selectedNode.text || selectedNode.keyword || "Actional Space of Aesthetic Practice",
     summary: getNodeSummary(selectedNode, state),
     type: selectedNode.id === "theory-core-actional-space" ? "Theory Core" : selectedNode.semanticGroup || selectedNode.category || selectedNode.role || "Node",
-    categories: Array.from(new Set([...(selectedNode.concepts || []), ...(selectedNode.wikiCategories || []), ...(selectedNode.category ? [selectedNode.category] : [])])),
-    links: Array.from(new Set(selectedNode.wikiLinks || [])),
+    activatedDimensions: Array.from(new Set([...(selectedNode.theoryDimensions || []), ...(selectedNode.activatedDimensions || [])])).slice(0, 5),
+    transformationLogic: stabilizeTheoryStatement([...(selectedNode.concepts || []), ...(selectedNode.theoryDimensions || []), ...(selectedNode.semanticExcerpt ? [selectedNode.semanticExcerpt] : [])], "Actional Space of Aesthetic Practice"),
     relations: relatedEdges.map((edge) => ({
       id: edge.id,
-      label: edge.label || edge.type || "relation",
-      explanation: edge.explanation || stabilizeTheoryStatement([...(edge.sharedConcepts || []), ...(edge.sharedTheorySignals || []), ...(edge.theoryDimensions || [])], describeEdge(edge)),
+      title: edge.label || edge.type || "relation",
+      interpretation: edge.explanation || stabilizeTheoryStatement([...(edge.sharedTheorySignals || []), ...(edge.theoryDimensions || [])], describeEdge(edge)),
       confidence: Math.round((edge.confidence ?? edge.score ?? 1) * 100),
       weight: edge.weight ?? edge.score ?? 1,
-      evidence: Array.from(new Set([...(edge.sharedConcepts || []), ...(edge.sharedTheorySignals || []), ...(edge.theoryDimensions || [])])).slice(0, 4),
+      activatedDimensions: Array.from(new Set([...(edge.sharedTheorySignals || []), ...(edge.theoryDimensions || [])])).slice(0, 4),
+      transformationLogic: stabilizeTheoryStatement([...(edge.sharedTheorySignals || []), ...(edge.theoryDimensions || [])], describeEdge(edge)),
       kind: edge.type || "semantic",
     })),
   };
@@ -223,6 +222,8 @@ export function getTheoryStabilizationEntries(state) {
       id: `stabilization-${category.id}`,
       conceptName,
       explanation,
+      activatedDimensions: dimensions,
+      transformationLogic: transformed,
       linkedFragments: linkedNodes.map((node) => node.semanticLabel || node.title || node.keyword || node.text).filter(Boolean),
       mapping,
     };

@@ -27,10 +27,10 @@ const MAX_QUEUE_ITEMS = 24;
 const MAX_TRANSFORMATION_QUEUE = 12;
 const MAX_NODES = 18;
 const MAX_WIKI_ENTRIES = 3;
-const FEED_INTERVAL = 980;
-const EXTRACTION_INTERVAL = 5200;
-const RELATION_INTERVAL = 5600;
-const WIKI_INTERVAL = 18000;
+const FEED_INTERVAL = 5200;
+const EXTRACTION_INTERVAL = 6200;
+const RELATION_INTERVAL = 6400;
+const WIKI_INTERVAL = 22000;
 const MIN_WIKI_RESONANCE = 1.15;
 const THEORY_CORE_ID = "theory-core-actional-space";
 const THEORY_ATTRACTORS = [
@@ -334,17 +334,9 @@ function createCuratedIngestionItem(entry) {
     title: entry?.title || entry?.term || "Fragment",
     text: cleanedExcerpt,
     excerpt: cleanedExcerpt,
-    rawText: entry?.summary || entry?.excerpt || entry?.title || "",
-    category: entry?.title || "Fragment",
-    categories: [],
-    links: [],
-    keywords: tags,
-    concept: tags[0] || entry?.title || "Fragment",
-    wikiCategories: [],
-    wikiLinks: [],
-    wikiSummary: cleanedExcerpt,
-    wikiUrl: entry?.url || "",
     concepts: tags,
+      keywords: tags.slice(0, 4),
+      concept: tags[0] || entry?.title || "Fragment",
     activatedDimensions: evaluation.activatedDimensions || [],
     semanticPhysics: physics,
     theoryRelevance: Number(evaluation.score || 0),
@@ -428,10 +420,10 @@ export function createGraphActions(store) {
       state.selectedNode = state.selectedNode || THEORY_CORE_ID;
       refreshGraphTopology(state);
       state.nextTransformationAt = performance.now() + 600;
-      state.nextFeedAt = performance.now() + 120;
-      state.nextExtractionAt = performance.now() + 600;
-      state.nextRelationAt = performance.now() + 900;
-      state.nextWikiAt = performance.now() + 1800;
+      state.nextFeedAt = performance.now() + 4500;
+      state.nextExtractionAt = performance.now() + 6200;
+      state.nextRelationAt = performance.now() + 7200;
+      state.nextWikiAt = performance.now() + 2400;
       void this.ingestWikipediaPulse(WIKI_TOPICS[0]);
       scheduleGraphStateSave(state);
       store.update((draft) => {
@@ -494,6 +486,38 @@ export function createGraphActions(store) {
       }
     },
 
+    setSimulationRunning(running) {
+      const now = performance.now();
+      store.update((draft) => {
+        if (!running) {
+          if (draft.running) {
+            draft.running = false;
+            draft.pausedAt = now;
+          }
+          return;
+        }
+
+        if (draft.running) {
+          return;
+        }
+
+        const pausedAt = Number(draft.pausedAt || 0) || now;
+        const elapsed = Math.max(0, now - pausedAt);
+        draft.running = true;
+        draft.pausedAt = 0;
+        draft.lastFrameAt = now;
+        draft.nextFeedAt += elapsed;
+        draft.nextExtractionAt += elapsed;
+        draft.nextRelationAt += elapsed;
+        draft.nextWikiAt += elapsed;
+        draft.nextTransformationAt += elapsed;
+        draft.ingestionQueue = draft.ingestionQueue.map((item) => ({
+          ...item,
+          revealAt: Number(item.revealAt || 0) ? Number(item.revealAt || 0) + elapsed : item.revealAt,
+        }));
+      });
+    },
+
     async expandNode(node) {
       const topics = collectExpansionTopicsFromNode(node);
       for (const topic of topics.slice(0, 1)) {
@@ -522,7 +546,7 @@ export function createGraphActions(store) {
 
         const stagedItem = {
           ...curatedItem,
-          revealAt: performance.now() + (state.ingestionQueue.length + 1) * 720,
+          revealAt: performance.now() + Math.max(4500, (state.ingestionQueue.length + 1) * 5200),
           stage: "queued",
         };
 
